@@ -1,0 +1,40 @@
+{
+  "applications": {
+    "notepad": "notepad.exe",
+    "chrome": "chrome.exe",
+    "explorer": "explorer.exe",
+    "calculator": "calc.exe",
+    "cmd": "cmd.exe",
+    "powershell": "powershell.exe",
+    "taskmgr": "taskmgr.exe",
+    "antigravity": "C:\\Users\\SHUBHAM\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Antigravity\\Antigravity IDE.lnk",
+    "anitygravity": "antigravity.exe",
+    "chatgpt": "https://chatgpt.com"
+  },
+  "search_engine": "https://www.google.com/search?q=",
+  "safe_commands": [
+    "ipconfig",
+    "systeminfo",
+    "tasklist",
+    "ping 8.8.8.8",
+    "dir",
+    "whoami",
+    "hostname",
+    "netstat"
+  ],
+  "macros": {
+    "back to work": [
+      "antigravity",
+      "chatgpt",
+      "chrome"
+    ],
+    "gaming time": [
+      "discord",
+      "steam"
+    ],
+    "relax": [
+      "spotify",
+      "chrome"
+    ]
+  }
+}
