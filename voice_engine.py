@@ -222,12 +222,12 @@ def always_listening_loop():
     while True:
         try:
             with mic as source:
-                print("\r[Status: Listening for 'Jarvis']...", end="", flush=True)
+                print("\r\033[K[Status: Listening for 'Jarvis']...", end="", flush=True)
                 audio = rec.listen(source, timeout=None, phrase_time_limit=10)
                 
-            print("\r[Status: Processing audio]...", end="", flush=True)
+            print("\r\033[K[Status: Processing audio]...", end="", flush=True)
             text = rec.recognize_google(audio, language=cfg["language"]).strip()
-            print(f"\r\033[90m[Heard]: {text}\033[0m", flush=True)
+            print(f"\r\033[K\033[90m[Heard]: {text}\033[0m", flush=True)
             
             text_lower = text.lower()
             
@@ -254,9 +254,9 @@ def always_listening_loop():
                         # User only said "Jarvis", ask what they want
                         speak("Yes, sir?")
                         with mic as source:
-                            print("\r[Status: Listening for command]...", end="", flush=True)
+                            print("\r\033[K[Status: Listening for command]...", end="", flush=True)
                             audio_cmd = rec.listen(source, timeout=5, phrase_time_limit=6)
-                        print("\r[Status: Processing follow-up]...", end="", flush=True)
+                        print("\r\033[K[Status: Processing follow-up]...", end="", flush=True)
                         follow_up = rec.recognize_google(audio_cmd, language=cfg["language"]).strip()
                         print(f"\r\033[32m[USER] (Voice):\033[0m {follow_up}", flush=True)
                         parse_and_execute(follow_up)
