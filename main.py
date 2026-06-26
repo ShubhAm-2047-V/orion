@@ -118,6 +118,8 @@ def print_help(category=None):
         print(f"  {COLOR_GREEN}wifi signal{COLOR_RESET} / {COLOR_GREEN}get ssid{COLOR_RESET}       {COLOR_GRAY}-{COLOR_RESET} {COLOR_WHITE}Retrieve connected Wi-Fi connection info.{COLOR_RESET}")
         print(f"  {COLOR_GREEN}screenshot{COLOR_RESET}                 {COLOR_GRAY}-{COLOR_RESET} {COLOR_WHITE}Capture desktop screen and save locally.{COLOR_RESET}")
         print(f"  {COLOR_GREEN}clear clipboard{COLOR_RESET}            {COLOR_GRAY}-{COLOR_RESET} {COLOR_WHITE}Clear copy-paste clipboard memory.{COLOR_RESET}")
+        print(f"  {COLOR_GREEN}voice{COLOR_RESET}                      {COLOR_GRAY}-{COLOR_RESET} {COLOR_WHITE}Listen for a single spoken voice command (via Mic).{COLOR_RESET}")
+        print(f"  {COLOR_GREEN}voice loop{COLOR_RESET}                 {COLOR_GRAY}-{COLOR_RESET} {COLOR_WHITE}Enter continuous hands-free voice command loop mode.{COLOR_RESET}")
         print(f"  {COLOR_GREEN}open {COLOR_CYAN}<item>{COLOR_RESET} settings        {COLOR_GRAY}-{COLOR_RESET} {COLOR_WHITE}Deep-link: {COLOR_CYAN}wifi, bluetooth, update, sound, display{COLOR_WHITE}.{COLOR_RESET}")
         header_shown = True
 
@@ -275,6 +277,20 @@ def parse_and_execute(user_input):
         return
     if user_input_lower in ['what can you do']:
         show_interactive_help()
+        return
+
+    # 2.5 Voice command triggers
+    if re.match(r'^(?:voice|listen|speak|speak\s+command)$', user_input_lower):
+        from voice_engine import listen_for_command
+        voice_cmd = listen_for_command()
+        if voice_cmd:
+            print(f"\033[32m[USER] (Voice):\033[0m {voice_cmd}")
+            parse_and_execute(voice_cmd)
+        return
+        
+    if re.match(r'^(?:voice\s+loop|listen\s+loop|voice\s+mode|continuous\s+listening)$', user_input_lower):
+        from voice_engine import voice_loop_mode
+        voice_loop_mode()
         return
 
     # 3. System Status
