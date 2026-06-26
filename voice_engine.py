@@ -139,36 +139,57 @@ def always_listening_loop():
                 break
         return
         
+    print("\n\033[36m[JARVIS]: Calibrating microphone for ambient noise...\033[0m")
+    try:
+        with mic as source:
+            rec.adjust_for_ambient_noise(source, duration=1.5)
+            # Make response snappier: lower pauses before dispatching
+            rec.pause_threshold = 0.5
+            # Slow down threshold damping to keep sensitiveness high
+            rec.dynamic_energy_adjustment_damping = 0.15
+            rec.dynamic_energy_adjustment_ratio = 1.5
+    except Exception as e:
+        print(f"[JARVIS]: Calibration warning: {e}")
+        
     print("\n\033[36m[JARVIS]: Always-listening mode active. Say 'Jarvis ...' to command.\033[0m")
+    
+    wake_words = ["jarvis", "javis", "travis", "garvis", "jarves", "jarvees", "charvis", "arvis", "jarv"]
     
     while True:
         try:
             with mic as source:
-                # Adjust for ambient noise slightly faster to not block
-                rec.adjust_for_ambient_noise(source, duration=0.8)
+                # None timeout means wait indefinitely for speech to start, stopping CPU spin
                 print("\r[Status: Listening for 'Jarvis']...", end="", flush=True)
-                audio = rec.listen(source, timeout=8, phrase_time_limit=8)
+                audio = rec.listen(source, timeout=None, phrase_time_limit=10)
                 
             print("\r[Status: Processing audio]...", end="", flush=True)
             text = rec.recognize_google(audio).strip()
             print(f"\r\033[90m[Heard]: {text}\033[0m", flush=True)
             
             text_lower = text.lower()
-            if "jarvis" in text_lower:
-                # Extract command after "jarvis"
-                match = re.search(r'\bjarvis\b\s*(.*)', text_lower)
+            
+            # Detect wake words (phonetic variations)
+            wake_word_detected = False
+            detected_wake = ""
+            for ww in wake_words:
+                if ww in text_lower:
+                    wake_word_detected = True
+                    detected_wake = ww
+                    break
+            
+            if wake_word_detected:
+                # Extract command after the matched wake word
+                match = re.search(rf'\b{detected_wake}\b\s*(.*)', text_lower)
                 if match:
                     command = match.group(1).strip()
-                    # Preserve original case for target names (extract casing from original text)
-                    orig_match = re.search(r'\bjarvis\b\s*(.*)', text, re.IGNORECASE)
+                    # Preserve casing for proper extraction
+                    orig_match = re.search(rf'\b{detected_wake}\b\s*(.*)', text, re.IGNORECASE)
                     orig_command = orig_match.group(1).strip() if orig_match else command
                     
                     if not orig_command:
-                        # User only said "Jarvis", prompt for command
+                        # User only said "Jarvis", ask what they want
                         speak("Yes, sir?")
-                        # Listen for follow-up command
                         with mic as source:
-                            rec.adjust_for_ambient_noise(source, duration=0.8)
                             print("\r[Status: Listening for command]...", end="", flush=True)
                             audio_cmd = rec.listen(source, timeout=5, phrase_time_limit=6)
                         print("\r[Status: Processing follow-up]...", end="", flush=True)
@@ -182,7 +203,7 @@ def always_listening_loop():
         except sr.WaitTimeoutError:
             continue
         except sr.UnknownValueError:
-            # Just ignore unrecognized noise
+            # Silent fallback for unrecognized background noise
             continue
         except sr.RequestError as e:
             print(f"\r\033[31m[JARVIS]: Speech API request error: {e}\033[0m", flush=True)
