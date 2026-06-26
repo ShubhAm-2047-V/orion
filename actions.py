@@ -54,6 +54,12 @@ def open_app_direct(app_name_lower):
                 os.startfile(executable)
             return True
         except Exception:
+            if app_name_lower == "whatsapp":
+                try:
+                    webbrowser.open("https://web.whatsapp.com")
+                    return True
+                except Exception:
+                    pass
             pass
             
     # 2. PATH check
@@ -131,6 +137,11 @@ def open_app(app_name):
     if app_name_lower.startswith("open "):
         app_name_lower = app_name_lower[5:].strip()
         
+    # 1. Try launching directly first (via config mapping or PATH)
+    if open_app_direct(app_name_lower):
+        return f"Successfully launched '{app_name_lower}'."
+        
+    # 2. Fallback: Windows search keystroke simulation
     speak(f"Searching and launching '{app_name_lower}' via Windows search...")
     
     # Escape single quotes for PowerShell SendKeys string safety
@@ -149,10 +160,7 @@ def open_app(app_name):
         subprocess.run(["powershell", "-Command", ps_command], capture_output=True, text=True, timeout=5)
         return f"Successfully simulated Windows Search search and enter for '{app_name_lower}'."
     except Exception as e:
-        speak(f"Keystroke simulation failed: {e}. Executing background launch fallback...")
-        if open_app_direct(app_name_lower):
-            return f"Successfully launched '{app_name_lower}' using background fallback."
-        return f"Could not launch '{app_name_lower}' using background fallbacks either."
+        return f"Could not launch '{app_name_lower}': {e}"
 
 def run_macro(macro_name):
     config = load_config()
