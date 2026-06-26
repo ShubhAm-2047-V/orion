@@ -28,8 +28,8 @@ def correct_spelling(query):
     for word in words:
         if word.isalpha() and len(word) >= 3:
             word_lower = word.lower()
-            # Do not correct common contact names/app names that might resemble keywords
-            if word_lower in ["chrome", "notepad", "firefox", "edge", "cmd", "explorer", "calculator", "word", "excel", "powerpoint", "mummy", "mumm", "mumy"]:
+            # Do not correct common contact names/app names or common words that might resemble keywords
+            if word_lower in ["chrome", "notepad", "firefox", "edge", "cmd", "explorer", "calculator", "word", "excel", "powerpoint", "mummy", "mumm", "mumy", "all", "and", "any", "set", "run", "get", "put", "off", "on", "out", "new", "now", "our", "one", "two", "ten", "day", "key", "say", "see", "what", "how", "who", "why", "can", "you", "not", "dont", "please", "sir", "back", "work", "time", "date", "gpt", "gravity", "chatgpt", "antigravity", "left", "right", "top", "bottom", "second", "seconds", "minute", "minutes", "hour", "hours", "after", "in", "at", "every"]:
                 corrected_words.append(word)
                 continue
             
@@ -53,6 +53,39 @@ def translate_to_command(user_input):
     if not user_input:
         return ""
         
+    # Translate aliases/abbreviations as whole words
+    user_input = re.sub(r'\bgpt\b', 'chatgpt', user_input, flags=re.IGNORECASE)
+    user_input = re.sub(r'\bgravity\b', 'antigravity', user_input, flags=re.IGNORECASE)
+        
+    # Check if the query matches a macro command exactly before spell checking
+    try:
+        import os
+        import json
+        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            macros = config.get("macros", {})
+            
+            clean_input = user_input.strip()
+            clean_input_lower = clean_input.lower()
+            
+            for prefix in ["jarvis please don't ", "jarvis please ", "jarvis ", "hey jarvis ", "please "]:
+                if clean_input_lower.startswith(prefix):
+                    clean_input = clean_input[len(prefix):].strip()
+                    clean_input_lower = clean_input.lower()
+            
+            macro_to_check = clean_input_lower
+            for prefix in ["profile ", "activate ", "macro "]:
+                if macro_to_check.startswith(prefix):
+                    macro_to_check = macro_to_check[len(prefix):].strip()
+            
+            macro_to_check = re.sub(r'[\?\!\.\,]+$', '', macro_to_check).strip()
+            
+            if macro_to_check in macros:
+                return user_input  # Return immediately as-is
+    except Exception:
+        pass
+
     # Apply fuzzy spelling correction to command keywords
     user_input = correct_spelling(user_input)
         
@@ -378,7 +411,11 @@ def translate_to_command(user_input):
             return f'whatsapp message to "{target}" text "{message}"'
 
     # Pattern B: "send hello to Mummy"
-    wa_msg_to = re.match(r'^(?:send\s+)?(?:a\s+)?(?:message|text|msg)?\s*("?)(.+?)\1\s+to\s+("?)([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\3(?:\s+on\s+whatsapp|\s+via\s+whatsapp)?$', query_lower)
+    has_msg_prefix = re.match(r'^(?:send|message|text|msg)\b', query_lower) is not None
+    has_msg_suffix = re.search(r'(?:on\s+whatsapp|via\s+whatsapp)$', query_lower) is not None
+    wa_msg_to = None
+    if has_msg_prefix or has_msg_suffix:
+        wa_msg_to = re.match(r'^(?:send\s+)?(?:a\s+)?(?:message|text|msg)?\s*("?)(.+?)\1\s+to\s+("?)([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\3(?:\s+on\s+whatsapp|\s+via\s+whatsapp)?$', query_lower)
     if wa_msg_to:
         orig_match = re.match(r'^(?:send\s+)?(?:a\s+)?(?:message|text|msg)?\s*("?)(.+?)\1\s+to\s+("?)([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\3(?:\s+on\s+whatsapp|\s+via\s+whatsapp)?$', query_clean, re.IGNORECASE)
         if orig_match:
@@ -500,9 +537,9 @@ def translate_to_command(user_input):
             unit = orig_match.group(4).strip()
             return f'schedule "{cmd}" every {val} {unit}'
 
-    sched_relative = re.match(r'^schedule\s+("?)(.+?)\1\s+in\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', query_lower)
+    sched_relative = re.match(r'^schedule\s+("?)(.+?)\1\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', query_lower)
     if sched_relative:
-        orig_match = re.match(r'^schedule\s+("?)(.+?)\1\s+in\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', query_clean, re.IGNORECASE)
+        orig_match = re.match(r'^schedule\s+("?)(.+?)\1\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', query_clean, re.IGNORECASE)
         if orig_match:
             cmd = orig_match.group(2).strip()
             val = orig_match.group(3).strip()

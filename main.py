@@ -783,10 +783,10 @@ def parse_and_execute(user_input):
         return
 
     # 6.3 Timed/Scheduled Controls (Persistent Scheduler integration)
-    # Open app relative: open chrome in 10 minutes
-    sched_open_match = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+in\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
+    # Open app relative: open chrome in/after 10 minutes
+    sched_open_match = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
     if sched_open_match:
-        sched_open_orig = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+in\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
+        sched_open_orig = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
         if sched_open_orig:
             app_name = sched_open_orig.group(1).strip()
             val_val = int(sched_open_orig.group(2).strip())
@@ -803,10 +803,10 @@ def parse_and_execute(user_input):
             print(f"\n{res}")
             return
 
-    # Close app relative: close chrome in 10 minutes
-    sched_close_match = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+in\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
+    # Close app relative: close chrome in/after 10 minutes
+    sched_close_match = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
     if sched_close_match:
-        sched_close_orig = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+in\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
+        sched_close_orig = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
         if sched_close_orig:
             app_name = sched_close_orig.group(1).strip()
             val_val = int(sched_close_orig.group(2).strip())
@@ -955,37 +955,37 @@ def parse_and_execute(user_input):
         if app_name.startswith("website "):
             url = app_name[len("website "):].strip()
             res = open_url(url)
-            print(f"\n{res}")
+            speak(res)
             return
         res = open_app(app_name)
-        print(f"\n{res}")
+        speak(res)
         return
 
     # 6.4 Close Current App
     if re.match(r'^(close\s+current\s+app|close\s+current\s+window|close\s+active\s+app|close\s+current)$', user_input_lower):
         res = close_current_app()
-        print(f"\n{res}")
+        speak(res)
         return
 
     # 6.45 Minimize/Maximize Controls
     if re.match(r'^(minimize\s+all|minimize\s+all\s+apps|minimize\s+all\s+windows)$', user_input_lower):
         res = minimize_all()
-        print(f"\n{res}")
+        speak(res)
         return
         
     if re.match(r'^(maximize\s+all|maximize\s+all\s+apps|maximize\s+all\s+windows|restore\s+all|restore\s+all\s+apps|restore\s+all\s+windows)$', user_input_lower):
         res = maximize_all()
-        print(f"\n{res}")
+        speak(res)
         return
 
-    if re.match(r'^(minimize\s+current\s+app|minimize\s+current\s+window|minimize\s+active\s+app|minimize\s+current)$', user_input_lower):
+    if re.match(r'^(minimize\s+current\s+app|minimize\s+current\s+window|minimize\s+active\s+app|minimize\s+current|minimize)$', user_input_lower):
         res = minimize_current_app()
-        print(f"\n{res}")
+        speak(res)
         return
 
-    if re.match(r'^(maximize\s+current\s+app|maximize\s+current\s+window|maximize\s+active\s+app|maximize\s+current|restore\s+current\s+app)$', user_input_lower):
+    if re.match(r'^(maximize\s+current\s+app|maximize\s+current\s+window|maximize\s+active\s+app|maximize\s+current|restore\s+current\s+app|maximize)$', user_input_lower):
         res = maximize_current_app()
-        print(f"\n{res}")
+        speak(res)
         return
 
     # 6.47 Maximize/Minimize Specific App
@@ -993,23 +993,31 @@ def parse_and_execute(user_input):
     if maximize_match:
         app_name = maximize_match.group(1).strip()
         res = maximize_app(app_name)
-        print(f"\n{res}")
+        speak(res)
         return
 
     minimize_app_match = re.match(r'^minimize\s+([a-zA-Z0-9_\-\.\s]+)$', user_input_lower)
     if minimize_app_match:
         app_name = minimize_app_match.group(1).strip()
         res = minimize_app(app_name)
-        print(f"\n{res}")
+        speak(res)
         return
 
     # 6.49 Window Layout & Snapping
+    # Snap current active window: snap right, snap left
+    snap_current_match = re.match(r'^snap\s+(left|right|top|bottom|maximize|minimize|max|min)$', user_input_lower)
+    if snap_current_match:
+        direction = snap_current_match.group(1).strip()
+        res = snap_app("current", direction)
+        speak(res)
+        return
+
     snap_match = re.match(r'^snap\s+([a-zA-Z0-9_\-\.\s]+)\s+(left|right|top|bottom|maximize|minimize|max|min)$', user_input_lower)
     if snap_match:
         app_name = snap_match.group(1).strip()
         direction = snap_match.group(2).strip()
         res = snap_app(app_name, direction)
-        print(f"\n{res}")
+        speak(res)
         return
 
     # 6.51 Smart App Switching
@@ -1085,7 +1093,7 @@ def parse_and_execute(user_input):
     if close_match:
         app_name = close_match.group(1).strip()
         res = close_app(app_name)
-        print(f"\n{res}")
+        speak(res)
         return
 
     # 7. Open Website
