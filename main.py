@@ -1253,8 +1253,7 @@ def main():
         sys.exit(0)
 
     print(BANNER)
-    speak("Protocol active. Secure connection established.")
-    print(f"          {COLOR_GRAY}Type 'help' to view the command protocol matrix.{COLOR_RESET}")
+    speak("Hello sir.")
     
     # Start the global hotkey listener in background
     start_hotkey_listener()
@@ -1263,15 +1262,9 @@ def main():
     from schedule.scheduler import scheduler_loop
     threading.Thread(target=scheduler_loop, args=(parse_and_execute,), daemon=True).start()
     
-    while True:
-        try:
-            user_input = input(f"\n{COLOR_GREEN}[USER]:{COLOR_RESET} ")
-            parse_and_execute(user_input)
-        except KeyboardInterrupt:
-            speak("System execution interrupted. Powering down.")
-            break
-        except Exception as e:
-            print(f"\nAn error occurred in main loop: {e}")
+    # Start the always-listening loop in main thread
+    from voice_engine import always_listening_loop
+    always_listening_loop()
 
 if __name__ == "__main__":
     main()

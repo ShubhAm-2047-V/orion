@@ -118,3 +118,78 @@ def voice_loop_mode():
             print(f"[Voice Mode] Error: {e}")
             # Prevent crashing, loop continues
             continue
+
+def always_listening_loop():
+    import speech_recognition as sr
+    import re
+    import time
+    from actions import speak
+    from main import parse_and_execute
+    
+    rec, mic, err = get_speech_recognizer_and_mic()
+    if err:
+        print(f"\n[JARVIS]: Voice hardware error: {err}")
+        speak("Voice hardware error, sir. Falling back to text console.")
+        # Fall back to console input so the app doesn't crash
+        while True:
+            try:
+                user_input = input(f"\n\033[32m[USER]:\033[0m ")
+                parse_and_execute(user_input)
+            except (KeyboardInterrupt, SystemExit):
+                break
+        return
+        
+    print("\n\033[36m[JARVIS]: Always-listening mode active. Say 'Jarvis ...' to command.\033[0m")
+    
+    while True:
+        try:
+            with mic as source:
+                # Adjust for ambient noise slightly faster to not block
+                rec.adjust_for_ambient_noise(source, duration=0.8)
+                print("\r[Status: Listening for 'Jarvis']...", end="", flush=True)
+                audio = rec.listen(source, timeout=8, phrase_time_limit=8)
+                
+            print("\r[Status: Processing audio]...", end="", flush=True)
+            text = rec.recognize_google(audio).strip()
+            print(f"\r\033[90m[Heard]: {text}\033[0m", flush=True)
+            
+            text_lower = text.lower()
+            if "jarvis" in text_lower:
+                # Extract command after "jarvis"
+                match = re.search(r'\bjarvis\b\s*(.*)', text_lower)
+                if match:
+                    command = match.group(1).strip()
+                    # Preserve original case for target names (extract casing from original text)
+                    orig_match = re.search(r'\bjarvis\b\s*(.*)', text, re.IGNORECASE)
+                    orig_command = orig_match.group(1).strip() if orig_match else command
+                    
+                    if not orig_command:
+                        # User only said "Jarvis", prompt for command
+                        speak("Yes, sir?")
+                        # Listen for follow-up command
+                        with mic as source:
+                            rec.adjust_for_ambient_noise(source, duration=0.8)
+                            print("\r[Status: Listening for command]...", end="", flush=True)
+                            audio_cmd = rec.listen(source, timeout=5, phrase_time_limit=6)
+                        print("\r[Status: Processing follow-up]...", end="", flush=True)
+                        follow_up = rec.recognize_google(audio_cmd).strip()
+                        print(f"\r\033[32m[USER] (Voice):\033[0m {follow_up}", flush=True)
+                        parse_and_execute(follow_up)
+                    else:
+                        print(f"\r\033[32m[USER] (Voice):\033[0m {orig_command}", flush=True)
+                        parse_and_execute(orig_command)
+                        
+        except sr.WaitTimeoutError:
+            continue
+        except sr.UnknownValueError:
+            # Just ignore unrecognized noise
+            continue
+        except sr.RequestError as e:
+            print(f"\r\033[31m[JARVIS]: Speech API request error: {e}\033[0m", flush=True)
+            time.sleep(2)
+        except KeyboardInterrupt:
+            speak("Powering down. Goodbye, sir.")
+            break
+        except Exception as e:
+            print(f"\r\033[31m[JARVIS]: Loop error: {e}\033[0m", flush=True)
+            continue
