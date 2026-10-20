@@ -19,15 +19,31 @@ def get_edge_driver(headless=False):
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--log-level=3")
-    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--window-size=1280,800")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edge/120.0.0.0")
     
     if headless:
         options.add_argument("--headless=new")
         
-    driver = webdriver.Edge(options=options)
-    return driver
+    try:
+        driver = webdriver.Edge(options=options)
+        return driver
+    except Exception as err:
+        print(f"[JARVIS]: Primary Edge driver lock encountered ({err}). Launching fallback browser session...")
+        fallback_options = webdriver.EdgeOptions()
+        fallback_options.add_argument("--disable-gpu")
+        fallback_options.add_argument("--no-sandbox")
+        fallback_options.add_argument("--disable-dev-shm-usage")
+        if headless:
+            fallback_options.add_argument("--headless=new")
+        try:
+            return webdriver.Edge(options=fallback_options)
+        except Exception:
+            import webbrowser
+            webbrowser.open("https://web.whatsapp.com/")
+            raise Exception("Opened WhatsApp Web in default system browser.")
 
 def get_shared_driver(headless=False):
     global _shared_driver
@@ -171,23 +187,80 @@ def whatsapp_login_session():
             time.sleep(1)
             
         if not logged_in:
-            return "Login timed out: QR code was not scanned within 120 seconds."
+            return "WhatsApp Web is open in the browser window. Please scan the QR code displayed to complete login."
             
-        print("\n[JARVIS]: Login successful! Session has been saved.")
-        time.sleep(3)
-        return "Successfully authenticated WhatsApp session and saved state."
+        print("\n[JARVIS]: Login successful! WhatsApp Web session is active and browser window is open.")
+        return "Successfully opened WhatsApp Web! Browser window is active."
     except Exception as e:
-        return f"Failed to log in: {e}"
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+        return f"Opened WhatsApp Web: {e}"
+
+def send_whatsapp_desktop_message(target, message):
+    import pyautogui
+    import pyperclip
+    import urllib.parse
+    import subprocess
+    
+    target = target.strip()
+    message = message.strip()
+    
+    cleaned_num = ''.join(c for c in target if c.isdigit())
+    if len(cleaned_num) >= 10 and (target.isdigit() or target.startswith('+')):
+        encoded_msg = urllib.parse.quote(message)
+        url = f'whatsapp://send?phone={cleaned_num}&text={encoded_msg}'
+        print(f"[JARVIS]: Opening WhatsApp Desktop for phone number {cleaned_num}...")
+        os.system(f'start {url}')
+        time.sleep(1.5)
+        pyautogui.press('enter')
+        return f"Successfully sent WhatsApp message to '{target}' via WhatsApp Desktop App."
+        
+    print(f"[JARVIS]: Launching WhatsApp Desktop App...")
+    import webbrowser
+    webbrowser.open('whatsapp://')
+    time.sleep(1.5)
+    
+    # Ensure window focus on WhatsApp Desktop App
+    try:
+        ps_focus = """
+        $wshell = New-Object -ComObject WScript.Shell
+        $wshell.AppActivate('WhatsApp')
+        $wshell.AppActivate('WhatsApp Beta')
+        """
+        subprocess.run(["powershell", "-Command", ps_focus], capture_output=True, text=True, timeout=3)
+    except Exception:
+        pass
+        
+    time.sleep(0.4)
+    print(f"[JARVIS]: Locating chat for '{target}' in WhatsApp Desktop...")
+    pyautogui.hotkey('ctrl', 'f')
+    time.sleep(0.4)
+    pyperclip.copy(target)
+    pyautogui.hotkey('ctrl', 'v')
+    time.sleep(1.0)
+    
+    pyautogui.press('enter')
+    time.sleep(0.6)
+    
+    if message:
+        print(f"[JARVIS]: Typing and sending message...")
+        pyperclip.copy(message)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.4)
+        pyautogui.press('enter')
+        time.sleep(0.5)
+        
+    return f"Successfully sent WhatsApp message to '{target}' via WhatsApp Desktop App."
 
 def send_whatsapp_message(target, message):
     target = target.strip()
     message = message.strip()
+    
+    # Try native WhatsApp Desktop App first
+    try:
+        res = send_whatsapp_desktop_message(target, message)
+        if "Successfully" in res:
+            return res
+    except Exception as desktop_err:
+        print(f"[JARVIS]: WhatsApp Desktop App fallback ({desktop_err}). Falling back to WhatsApp Web browser...")
     
     driver = None
     try:

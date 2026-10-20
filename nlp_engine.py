@@ -1,6 +1,7 @@
 import re
 import difflib
 
+# Deeply expanded dictionary of protected system keywords and engine capability terms
 KEYWORDS = [
     "whatsapp", "message", "broadcast", "status", "online", "unreads", "unread", "login", "logout", "signout", "call", "video",
     "brightness", "volume", "mute", "unmute", "master", "audio", "speaker", "speakers", "microphone", "mic",
@@ -11,6 +12,12 @@ KEYWORDS = [
     "desktop", "virtual", "switch", "jiggler", "awake", "sleep", "restart", "reboot", "shutdown",
     "open", "close", "launch", "terminate", "website", "settings", "application", "window", "active", "current",
     "minimize", "maximize",
+    # Domain Engine keywords
+    "email", "mail", "gmail", "outlook", "inbox", "attachment",
+    "telegram", "spotify", "youtube", "yt", "search", "google",
+    "code", "ide", "vscode", "antigravity", "terminal", "script",
+    "vision", "capture", "display", "notify", "notification", "alert",
+    "remember", "recall", "forget",
     # Core CLI control words
     "help", "commands", "exit", "quit",
     # Protected common action words & status states
@@ -25,11 +32,21 @@ def correct_spelling(query):
     words = re.findall(r'[a-zA-Z]+|\d+|[^a-zA-Z\d]', query)
     corrected_words = []
     
+    # Preserved target words/names that should never be corrected
+    protected_targets = {
+        "chrome", "notepad", "firefox", "edge", "cmd", "explorer", "calculator", "word", "excel", "powerpoint",
+        "mummy", "mumm", "mumy", "dad", "john", "alex", "email", "mail", "gmail", "outlook", "telegram", "spotify",
+        "youtube", "yt", "google", "screen", "take", "all", "and", "any", "set", "run", "get", "put", "off", "on", "out", "new", "now",
+        "our", "one", "two", "ten", "day", "key", "say", "see", "what", "how", "who", "why", "can", "you", "not",
+        "dont", "please", "sir", "back", "work", "time", "date", "gpt", "gravity", "chatgpt", "antigravity",
+        "left", "right", "top", "bottom", "second", "seconds", "minute", "minutes", "hour", "hours", "after",
+        "in", "at", "every", "arm", "armoury", "crate", "text", "msg", "send", "message"
+    }
+
     for word in words:
         if word.isalpha() and len(word) >= 3:
             word_lower = word.lower()
-            # Do not correct common contact names/app names or common words that might resemble keywords
-            if word_lower in ["chrome", "notepad", "firefox", "edge", "cmd", "explorer", "calculator", "word", "excel", "powerpoint", "mummy", "mumm", "mumy", "all", "and", "any", "set", "run", "get", "put", "off", "on", "out", "new", "now", "our", "one", "two", "ten", "day", "key", "say", "see", "what", "how", "who", "why", "can", "you", "not", "dont", "please", "sir", "back", "work", "time", "date", "gpt", "gravity", "chatgpt", "antigravity", "left", "right", "top", "bottom", "second", "seconds", "minute", "minutes", "hour", "hours", "after", "in", "at", "every"]:
+            if word_lower in protected_targets:
                 corrected_words.append(word)
                 continue
             
@@ -53,11 +70,12 @@ def translate_to_command(user_input):
     if not user_input:
         return ""
         
-    # Translate aliases/abbreviations as whole words
+    # Translate common aliases/abbreviations
     user_input = re.sub(r'\bgpt\b', 'chatgpt', user_input, flags=re.IGNORECASE)
     user_input = re.sub(r'\bgravity\b', 'antigravity', user_input, flags=re.IGNORECASE)
+    user_input = re.sub(r'\byt\b', 'youtube', user_input, flags=re.IGNORECASE)
         
-    # Check if the query matches a macro command exactly before spell checking
+    # Check if query matches a macro command directly before spell checking
     try:
         import os
         import json
@@ -69,7 +87,10 @@ def translate_to_command(user_input):
             clean_input = user_input.strip()
             clean_input_lower = clean_input.lower()
             
-            for prefix in ["jarvis please don't ", "jarvis please ", "jarvis ", "hey jarvis ", "please "]:
+            for prefix in [
+                "jarvis please don't ", "jarvis please ", "jarvis ", "hey jarvis ",
+                "could you please ", "can you please ", "i want you to ", "please "
+            ]:
                 if clean_input_lower.startswith(prefix):
                     clean_input = clean_input[len(prefix):].strip()
                     clean_input_lower = clean_input.lower()
@@ -82,7 +103,7 @@ def translate_to_command(user_input):
             macro_to_check = re.sub(r'[\?\!\.\,]+$', '', macro_to_check).strip()
             
             if macro_to_check in macros:
-                return user_input  # Return immediately as-is
+                return user_input
     except Exception:
         pass
 
@@ -92,14 +113,26 @@ def translate_to_command(user_input):
     query_clean = user_input.strip()
     query_lower = query_clean.lower()
     
-    # Remove leading common conversational phrases
-    # e.g., "jarvis please don't sleep" -> "don't sleep"
-    for prefix in ["jarvis please ", "jarvis ", "hey jarvis ", "please "]:
+    # Strip leading polite conversational phrases & filler prefixes
+    prefixes_to_strip = [
+        "jarvis please don't ", "jarvis please ", "jarvis ", "hey jarvis ",
+        "could you please ", "can you please ", "can you help me to ",
+        "i want you to ", "would you mind ", "kindly ", "please "
+    ]
+    for prefix in prefixes_to_strip:
         if query_lower.startswith(prefix):
             query_clean = query_clean[len(prefix):].strip()
             query_lower = query_clean.lower()
-            
-    # --- SECTION 1: Exact Synonyms / Keyword Matches ---
+
+    # Strip trailing polite fillers iteratively
+    changed = True
+    while changed:
+        old_len = len(query_clean)
+        query_clean = re.sub(r'\s+(?:please|sir|jarvis|for me|right now|asap|ok)$', '', query_clean, flags=re.IGNORECASE).strip()
+        query_lower = query_clean.lower()
+        changed = (len(query_clean) != old_len)
+
+    # --- SECTION 1: Deep Synonym Matrix Mapping ---
     synonyms = {
         # Keep Awake / Mouse Jiggler
         "keep awake": [
@@ -119,67 +152,72 @@ def translate_to_command(user_input):
         # System status / diagnostics
         "status": [
             "diagnostics", "system status", "hardware status", "pc status", 
-            "how is my computer", "system diagnostics", "check diagnostics",
-            "how is my computer doing", "system diagnostics details", "pc state"
+            "how is my computer", "system diagnostics", "check diagnostics", "check system status",
+            "how is my computer doing", "system diagnostics details", "pc state",
+            "system check karo", "computer kesa chal raha hai"
         ],
         
         # Battery status
         "battery": [
             "battery", "battery level", "power status", "is my laptop charging", 
             "check battery percentage", "how much battery is left", "battery status",
-            "charge kitna hai", "battery check"
+            "charge kitna hai", "battery check", "battery dekho"
         ],
         
         # Lock screen
         "lock pc": [
             "lock screen", "lock windows", "lock pc", "lock workstation", 
-            "secure computer", "lock my desktop", "lock the screen", "pc lock"
+            "secure computer", "lock my desktop", "lock the screen", "pc lock",
+            "screen lock karo", "computer lock karo"
         ],
         
         # Sleep PC
         "sleep pc": [
             "put pc to sleep", "sleep pc", "standby mode", "put computer on standby",
-            "sleep my computer", "put pc on sleep"
+            "sleep my computer", "put pc on sleep", "pc ko sula do"
         ],
         
         # Restart PC
         "restart pc": [
             "reboot pc", "restart computer", "reboot system", "restart windows",
-            "restart my machine", "reboot the workstation", "system restart"
+            "restart my machine", "reboot the workstation", "system restart", "computer restart karo"
         ],
         
         # Shutdown PC
         "shutdown pc": [
             "turn off pc", "shutdown computer", "power off pc", "shutdown windows",
-            "power off system", "turn off my computer"
+            "power off system", "turn off my computer", "pc band karo", "computer band karo"
         ],
         
         # Clean Temp
         "clean temp": [
             "clean temporary files", "clean temp", "delete temp", "clear cache", 
-            "clear temp files", "clean temp folder", "clean temporary directory"
+            "clear temp files", "clean temp folder", "clean temporary directory",
+            "temp clean karo", "kachra saaf karo"
         ],
         
         # Empty Recycle Bin
         "empty trash": [
             "empty trash", "empty recycle bin", "clean recycle bin", "purge trash",
-            "clear recycle bin", "empty the recycle bin", "bin empty", "clean bin"
+            "clear recycle bin", "empty the recycle bin", "bin empty", "clean bin",
+            "trash saaf karo", "recycle bin khali karo"
         ],
         
         # Turn off screen
         "turn off screen": [
             "turn off monitor", "turn off screen", "display sleep", "sleep monitor",
-            "turn off display", "put monitor to sleep", "screen band", "display band", "screen off"
+            "turn off display", "put monitor to sleep", "screen band", "display band", "screen off",
+            "screen band karo", "monitor band karo"
         ],
         
         # Dark / Light Theme
         "dark mode": [
             "enable dark mode", "turn on dark mode", "dark theme", "enable dark theme",
-            "switch to dark mode", "switch to dark theme"
+            "switch to dark mode", "switch to dark theme", "dark mode chalu karo"
         ],
         "light mode": [
             "enable light mode", "turn on light mode", "light theme", "enable light theme",
-            "switch to light mode", "switch to light theme"
+            "switch to light mode", "switch to light theme", "light mode chalu karo"
         ],
         
         # Top processes
@@ -197,35 +235,37 @@ def translate_to_command(user_input):
         # Storage
         "disk check": [
             "disk check", "storage space", "check hard drive", "how much disk space is left", 
-            "storage status", "disk space status", "check drive status", "check storage"
+            "storage status", "disk space status", "check drive status", "check storage",
+            "disk kitna khali hai"
         ],
         
         # RAM optimize
         "optimize memory": [
             "optimize memory", "trim ram", "free up ram", "clean ram", "boost memory",
-            "free ram", "clean memory usage", "ram clear", "memory clear"
+            "free ram", "clean memory usage", "ram clear", "memory clear", "ram free karo"
         ],
         
         # Calendar
         "calendar": [
-            "show calendar", "current month", "calendar view", "show me calendar"
+            "show calendar", "current month", "calendar view", "show me calendar", "calendar dekho"
         ],
         
         # Time / Date
         "time": [
             "what is the time", "check current time", "tell me time", "current time",
-            "what time is it", "tell me the time", "time batao", "time please"
+            "what time is it", "tell me the time", "time batao", "time please", "kitne baje hain"
         ],
         "date": [
             "what is today's date", "tell me date", "what date is today", "check date",
-            "whats today's date", "tell me the date", "date batao", "what day today"
+            "whats today's date", "tell me the date", "date batao", "what day today",
+            "what is the day", "what day is it", "what's the day", "what day", "day is it", "aaj konsa din hai"
         ],
         
-        # Screenshot (colloquial "ss")
+        # Screenshot
         "screenshot": [
             "take screenshot", "capture screen", "capture desktop", "take screen snap",
             "screenshot the screen", "capture my display", "ss", "click ss", "take ss",
-            "ss click", "screenshot lo", "snap screen"
+            "ss click", "screenshot lo", "snap screen", "screen ka photo lo", "screenshot ka photo lo", "photo lo"
         ],
         
         # Clear Clipboard
@@ -240,276 +280,155 @@ def translate_to_command(user_input):
         "prev desktop": ["previous virtual desktop", "switch to previous desktop", "prev virtual desktop"],
         
         # Volume relative adjustment
-        "volume up": ["increase volume", "volume up", "make it louder", "louder master", "raise master volume"],
-        "volume down": ["decrease volume", "volume down", "make it quieter", "quieter master", "lower master volume"],
-        "mute master": ["mute audio", "mute pc", "silence master", "mute master volume", "mute master", "sound band", "speaker silent", "sound mute"],
-        "unmute master": ["unmute audio", "unmute master", "restore sound", "unmute master volume", "sound chalu", "sound on", "unmute speaker"],
+        "volume up": ["increase volume", "volume up", "make it louder", "louder master", "raise master volume", "awaj badhao"],
+        "volume down": ["decrease volume", "volume down", "make it quieter", "quieter master", "lower master volume", "awaj kam karo"],
+        "mute master": ["mute audio", "mute pc", "silence master", "mute master volume", "mute master", "sound band", "speaker silent", "sound mute", "awaj band karo"],
+        "unmute master": ["unmute audio", "unmute master", "restore sound", "unmute master volume", "sound chalu", "sound on", "unmute speaker", "awaj chalu karo"],
         
         # Playback controls
-        "play": ["play song", "resume music", "resume playback", "start music", "play music"],
-        "pause": ["pause song", "stop music", "pause music", "pause playback"],
-        "next": ["skip track", "next song", "next track", "skip song"],
-        "previous": ["previous track", "previous song", "prev song", "go back song"],
+        "play": ["play song", "resume music", "resume playback", "start music", "play music", "gane chalu karo"],
+        "pause": ["pause song", "stop music", "pause music", "pause playback", "gane rok do"],
+        "next": ["skip track", "next song", "next track", "skip song", "agla gana"],
+        "previous": ["previous track", "previous song", "prev song", "go back song", "pichla gana"],
         
-        # WhatsApp General commands
-        "whatsapp login": ["whatsapp login", "whatsapp scan qr", "login to whatsapp", "auth whatsapp"],
+        # Domain Engines Synonyms
+        "whatsapp login": ["whatsapp login", "whatsapp scan qr", "login to whatsapp", "auth whatsapp", "open whatsapp", "launch whatsapp", "start whatsapp", "whatsapp open", "open wa", "whatsapp kholo", "whatsapp chalu karo"],
         "whatsapp unreads": ["check whatsapp unreads", "any unread whatsapp messages", "get whatsapp unreads", "whatsapp unread messages", "whatsapp unread dekho", "whatsapp unreads check"],
         "whatsapp logout": ["log out of whatsapp", "sign out of whatsapp", "whatsapp logout", "whatsapp signout", "whatsapp band karo"],
+        "open youtube": ["open youtube", "launch youtube", "start youtube", "youtube open", "open yt"],
+        "open settings": ["open settings", "show settings", "open system settings", "settings kholo"],
+        "open wifi settings": ["open wifi settings", "wifi settings", "wifi settings kholo"],
+        "open bluetooth settings": ["open bluetooth settings", "bluetooth settings", "bluetooth settings kholo"],
+        "open display settings": ["open display settings", "display settings"],
+        "open sound settings": ["open sound settings", "sound settings"],
         
         # Microphone controls
         "mute mic": ["mute microphone", "mute mic", "silence microphone", "mic band karo", "microphone band karo"],
         "unmute mic": ["unmute microphone", "unmute mic", "activate microphone", "mic chalu karo", "microphone chalu karo"],
         
         # Wifi signal details
-        "wifi signal": ["wifi details", "wifi status", "wifi signal", "network details", "check wifi", "network status", "get ssid", "ssid info", "wifi connection"]
+        "wifi signal": ["wifi details", "wifi status", "wifi signal", "network details", "check wifi", "network status", "get ssid", "ssid info", "wifi connection"],
+        
+        # Close all programs
+        "close all programs": [
+            "close all the programs running", "close all programs", "close all running programs",
+            "close all apps", "close all running apps", "close all open apps", "close all open programs",
+            "terminate all programs", "terminate all apps", "kill all apps", "kill all programs",
+            "close everything", "terminate everything",
+            "sare apps band karo", "sare programs close karo", "sare apps close karo", "sare windows close karo"
+        ]
     }
     
-    # Loop over synonym lists to find a direct match
-    # Strip any trailing punctuation (like '?') to handle "what is the time?"
+    # Check exact match in synonyms matrix after trimming punctuation
     clean_query_stripped = re.sub(r'[\?\!\.\,]+$', '', query_lower).strip()
     for cmd, patterns in synonyms.items():
         if clean_query_stripped in patterns:
             return cmd
-            
-    # --- SECTION 2: Regex Extraction and Translations ---
+
+    # --- SECTION 2: Dynamic Pattern Extraction & Hinglish Translation Rules ---
     
-    # PRECEDENCE RULE: Check specific action intents (mute, calls, status, files) before generic messages
-    
-    # 1. WhatsApp Mute / Unmute
+    # 1. Specific WhatsApp Mute / Unmute
     mute_match = re.match(r'^(?:whatsapp\s+)?(?:silence|mute)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_lower)
     if mute_match:
         orig_match = re.match(r'^(?:whatsapp\s+)?(?:silence|mute)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
         if orig_match:
             return f'whatsapp mute "{orig_match.group(1).strip()}"'
-            
-    unmute_match = re.match(r'^(?:whatsapp\s+)?unmute\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_lower)
-    if unmute_match:
-        orig_match = re.match(r'^(?:whatsapp\s+)?unmute\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
+
+    # 2. WhatsApp Direct Message (Explicit WhatsApp keyword)
+    wa_explicit_msg = re.match(r'^(?:whatsapp\s+message\s+to|send\s+whatsapp\s+to|whatsapp\s+to)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:text|message|saying)\s+(.+)$', query_lower)
+    if wa_explicit_msg:
+        orig_match = re.match(r'^(?:whatsapp\s+message\s+to|send\s+whatsapp\s+to|whatsapp\s+to)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:text|message|saying)\s+(.+)$', query_clean, re.IGNORECASE)
         if orig_match:
-            return f'whatsapp unmute "{orig_match.group(1).strip()}"'
+            return f'whatsapp message to "{orig_match.group(1).strip()}" text "{orig_match.group(2).strip()}"'
 
-    # 2. WhatsApp Read Last (English and Hinglish)
-    read_last_match = re.match(r'^(?:whatsapp\s+)?(?:read|check|get)\s+last\s+(?:message|text|msg)?\s*(?:from|of)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_lower)
-    if read_last_match:
-        orig_match = re.match(r'^(?:whatsapp\s+)?(?:read|check|get)\s+last\s+(?:message|text|msg)?\s*(?:from|of)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
+    # 2.5 Send <message> to <contact> (e.g., send hello to dad / text happy birthday to alex)
+    send_to_msg = re.match(r'^(?:send|message|text|msg)\s+(.+?)\s+to\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+)$', query_lower)
+    if send_to_msg:
+        orig_match = re.match(r'^(?:send|message|text|msg)\s+(.+?)\s+to\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+)$', query_clean, re.IGNORECASE)
         if orig_match:
-            return f'whatsapp read last from "{orig_match.group(1).strip()}"'
-
-    hinglish_read = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ka\s+(?:last\s+)?(?:message|msg|text)\s*(?:read\s+karo|padho|dekho)?$', query_lower)
-    if hinglish_read:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ka\s+(?:last\s+)?(?:message|msg|text)\s*(?:read\s+karo|padho|dekho)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp read last from "{orig_match.group(1).strip()}"'
-
-    # 3. WhatsApp Status / Online check (English and Hinglish)
-    status_match = re.match(r'^(?:whatsapp\s+)?(?:check\s+)?(?:online\s+)?status\s+(?:of|for)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_lower)
-    if status_match:
-        orig_match = re.match(r'^(?:whatsapp\s+)?(?:check\s+)?(?:online\s+)?status\s+(?:of|for)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp status of "{orig_match.group(1).strip()}"'
-
-    hinglish_status = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+(?:online\s+hai\s+kya|ka\s+status\s+check\s+karo|status|online\s+status)$', query_lower)
-    if hinglish_status:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+(?:online\s+hai\s+kya|ka\s+status\s+check\s+karo|status|online\s+status)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp status of "{orig_match.group(1).strip()}"'
-
-    # 4. WhatsApp Call / Video Call (English and Hinglish)
-    video_call_match = re.match(r'^(?:whatsapp\s+)?(?:make\s+a\s+)?video\s+call\s+(?:to\s+)?([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_lower)
-    if video_call_match:
-        orig_match = re.match(r'^(?:whatsapp\s+)?(?:make\s+a\s+)?video\s+call\s+(?:to\s+)?([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp video call "{orig_match.group(1).strip()}"'
-
-    voice_call_match = re.match(r'^(?:whatsapp\s+)?(?:make\s+a\s+)?(?:voice\s+)?call\s+(?:to\s+)?([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_lower)
-    if voice_call_match:
-        orig_match = re.match(r'^(?:whatsapp\s+)?(?:make\s+a\s+)?(?:voice\s+)?call\s+(?:to\s+)?([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp call "{orig_match.group(1).strip()}"'
-
-    hinglish_call = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:whatsapp\s+)?(?:voice\s+)?call\s+(?:karo|lagao|karna)(?:\s+on\s+whatsapp)?$', query_lower)
-    if hinglish_call:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:whatsapp\s+)?(?:voice\s+)?call\s+(?:karo|lagao|karna)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp call "{orig_match.group(1).strip()}"'
-
-    hinglish_vcall = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:whatsapp\s+)?video\s+call\s+(?:karo|lagao)(?:\s+on\s+whatsapp)?$', query_lower)
-    if hinglish_vcall:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:whatsapp\s+)?video\s+call\s+(?:karo|lagao)(?:\s+on\s+whatsapp)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'whatsapp video call "{orig_match.group(1).strip()}"'
-
-    # 5. WhatsApp Send File (English and Hinglish)
-    send_file_match = re.match(r'^(?:whatsapp\s+)?(?:send|upload)\s+(?:a|an|the\s+)?(?:file|document|media|image|photo|video)\s+to\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?(?:\s+path\s+(.+))?$', query_lower)
-    if send_file_match:
-        orig_match = re.match(r'^(?:whatsapp\s+)?(?:send|upload)\s+(?:a|an|the\s+)?(?:file|document|media|image|photo|video)\s+to\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)(?:\s+on\s+whatsapp)?(?:\s+path\s+(.+))?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            target = orig_match.group(1).strip()
-            path = orig_match.group(2).strip() if orig_match.group(2) else None
-            if path:
-                return f'whatsapp send file to "{target}" path "{path}"'
-            return f'whatsapp send file to "{target}"'
-
-    hinglish_file = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:a|an|the\s+)?(?:file|document|media|image|photo|video|pic|picture)\s+(?:send\s+)?(?:bhejo|karo)(?:\s+path\s+(.+))?$', query_lower)
-    if hinglish_file:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:a|an|the\s+)?(?:file|document|media|image|photo|video|pic|picture)\s+(?:send\s+)?(?:bhejo|karo)(?:\s+path\s+(.+))?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            target = orig_match.group(1).strip()
-            path = orig_match.group(2).strip() if orig_match.group(2) else None
-            if path:
-                return f'whatsapp send file to "{target}" path "{path}"'
-            return f'whatsapp send file to "{target}"'
-
-    # 6. WhatsApp Broadcast
-    wa_broadcast = re.match(r'^(?:whatsapp\s+)?broadcast\s+(?:message\s+)?to\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF\,]+?)\s+(?:saying|text|message|msg)\s+(.+)$', query_lower)
-    if wa_broadcast:
-        orig_match = re.match(r'^(?:whatsapp\s+)?broadcast\s+(?:message\s+)?to\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF\,]+?)\s+(?:saying|text|message|msg)\s+(.+)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            targets = orig_match.group(1).strip()
-            message = orig_match.group(2).strip()
-            return f'whatsapp broadcast to "{targets}" text "{message}"'
-
-    # 12. Display Brightness (e.g. set brightness 50, screen brightness 80, set screen brightness to 0)
-    brightness_set = re.match(r'^(?:set\s+|change\s+|adjust\s+)?(?:screen\s+)?brightness(?:\s+level)?(?:\s+to)?\s+(\d+)(?:\s*%)?$', query_lower)
-    if brightness_set:
-        return f'brightness {brightness_set.group(1)}'
-
-    # 13. Domain / Website Open (e.g. open youtube.com, go to google.com, visit github.com)
-    domain_open = re.match(r'^(?:open|launch|website|go\s+to|visit)\s+([a-zA-Z0-9_\-\.]+\.[a-zA-Z]{2,6})$', query_lower)
-    if domain_open:
-        orig_match = re.match(r'^(?:open|launch|website|go\s+to|visit)\s+([a-zA-Z0-9_\-\.]+\.[a-zA-Z]{2,6})$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'website {orig_match.group(1).strip()}'
-
-    # 14. Focus / Bring App to Front (e.g. bring chrome to front, focus on notepad, switch focus to word)
-    focus_match = re.match(r'^(?:bring\s+(.+?)\s+(?:to\s+)?front|bring\s+to\s+front\s+(.+?)|focus\s+on\s+(.+?)|switch\s+focus\s+to\s+(.+?))$', query_lower)
-    if focus_match:
-        target_app = None
-        for group_val in focus_match.groups():
-            if group_val:
-                target_app = group_val.strip()
-                break
-        if target_app:
-            orig_match = re.match(r'^(?:bring\s+(.+?)\s+(?:to\s+)?front|bring\s+to\s+front\s+(.+?)|focus\s+on\s+(.+?)|switch\s+focus\s+to\s+(.+?))$', query_clean, re.IGNORECASE)
-            if orig_match:
-                for orig_val in orig_match.groups():
-                    if orig_val:
-                        target_app = orig_val.strip()
-                        break
-            return f'switch to {target_app}'
-
-    # 7. WhatsApp Generic Messages (evaluated LAST to prevent greedy overlap)
-    # Pattern A: "send message to Mummy saying hello"
-    wa_msg_saying = re.match(r'^(?:send\s+(?:a\s+)?)?(?:whatsapp\s+)?(?:message|text|msg)?\s*(?:to\s+)?([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+(?:saying|text|message|msg)\s+(.+)$', query_lower)
-    if wa_msg_saying:
-        orig_match = re.match(r'^(?:send\s+(?:a\s+)?)?(?:whatsapp\s+)?(?:message|text|msg)?\s*(?:to\s+)?([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+(?:saying|text|message|msg)\s+(.+)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            target = orig_match.group(1).strip()
-            message = orig_match.group(2).strip()
-            if target.lower().endswith(" on whatsapp"):
-                target = target[:-12].strip()
-            return f'whatsapp message to "{target}" text "{message}"'
-
-    # Pattern B: "send hello to Mummy"
-    has_msg_prefix = re.match(r'^(?:send|message|text|msg)\b', query_lower) is not None
-    has_msg_suffix = re.search(r'(?:on\s+whatsapp|via\s+whatsapp)$', query_lower) is not None
-    wa_msg_to = None
-    if has_msg_prefix or has_msg_suffix:
-        wa_msg_to = re.match(r'^(?:send\s+)?(?:a\s+)?(?:message|text|msg)?\s*("?)(.+?)\1\s+to\s+("?)([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\3(?:\s+on\s+whatsapp|\s+via\s+whatsapp)?$', query_lower)
-    if wa_msg_to:
-        orig_match = re.match(r'^(?:send\s+)?(?:a\s+)?(?:message|text|msg)?\s*("?)(.+?)\1\s+to\s+("?)([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\3(?:\s+on\s+whatsapp|\s+via\s+whatsapp)?$', query_clean, re.IGNORECASE)
-        if orig_match:
-            message = orig_match.group(2).strip()
-            target = orig_match.group(4).strip()
-            if target.lower().endswith(" on whatsapp"):
-                target = target[:-12].strip()
-            excluded_verbs = [
-                "file", "document", "media", "image", "photo", "video", "a file", "a document", "a media", 
-                "an image", "a photo", "a video", "pic", "a pic", "picture", "a picture",
-                "switch", "focus", "bring", "open", "close", "run", "call", "video call", "mute", "unmute", 
-                "set", "change", "adjust", "play", "pause", "skip", "go", "show"
+            msg_content = orig_match.group(1).strip()
+            contact_name = orig_match.group(2).strip()
+            excluded_words = [
+                "file", "document", "media", "image", "photo", "video", "pic", "picture", 
+                "settings", "application", "macro", "schedule", "recurring", "mute", "unmute", "whatsapp",
+                "switch", "focus", "bring", "open", "close", "run", "call", "video call",
+                "email", "mail", "gmail", "outlook", "telegram"
             ]
-            if message.lower() not in excluded_verbs:
-                return f'whatsapp message to "{target}" text "{message}"'
+            if contact_name.lower() not in excluded_words and msg_content.lower() not in excluded_words:
+                return f'whatsapp message to "{contact_name}" text "{msg_content}"'
 
-    # Pattern C: Hinglish Message: Mummy ko message karo hello
-    wa_hinglish_msg = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:message|text|msg|bhejo|karo)\s+(?:karo|bhejo\s+)?(.+)$', query_lower)
-    if wa_hinglish_msg:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+ko\s+(?:message|text|msg|bhejo|karo)\s+(?:karo|bhejo\s+)?(.+)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            target = orig_match.group(1).strip()
-            message = orig_match.group(2).strip()
-            return f'whatsapp message to "{target}" text "{message}"'
-
-    # Pattern D: Simple Send: message Mummy hello / text Dad call me / send Mummy hi
-    wa_simple_msg = re.match(r'^(?:message|text|msg|send)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+(.+)$', query_lower)
+    # 3. Simple WhatsApp Send (Exclude other domain keywords)
+    wa_simple_msg = re.match(r'^(?:message|text|msg|send)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(.+)$', query_lower)
     if wa_simple_msg:
-        orig_match = re.match(r'^(?:message|text|msg|send)\s+([a-zA-Z0-9_\-\.\s\u00C0-\u017F\u2600-\u27BF]+?)\s+(.+)$', query_clean, re.IGNORECASE)
+        orig_match = re.match(r'^(?:message|text|msg|send)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(.+)$', query_clean, re.IGNORECASE)
         if orig_match:
             target = orig_match.group(1).strip()
             message = orig_match.group(2).strip()
             excluded_targets = [
                 "file", "document", "media", "image", "photo", "video", "pic", "picture", 
                 "settings", "application", "macro", "schedule", "recurring", "mute", "unmute", "whatsapp",
-                "switch", "focus", "bring", "open", "close", "run", "call", "video call"
+                "switch", "focus", "bring", "open", "close", "run", "call", "video call",
+                "email", "mail", "gmail", "outlook", "telegram"
             ]
             if target.lower() not in excluded_targets:
                 return f'whatsapp message to "{target}" text "{message}"'
 
-    # 8. Settings Deep-Links
+    # 4. Settings Deep-Links
     settings_link = re.match(r'^(?:open|show)\s+([a-zA-Z0-9_\-\.\s]+?)\s+settings$', query_lower)
     if settings_link:
         setting_type = settings_link.group(1).strip()
         if setting_type in ["wifi", "bluetooth", "update", "sound", "display"]:
             return f'open {setting_type} settings'
 
-    # 9. Volume Set (Master and App-Specific)
-    vol_master_set = re.match(r'^(?:set\s+)?(?:master\s+)?volume\s+(?:to\s+)?(\d+)$', query_lower)
-    if vol_master_set:
-        return f'volume master {vol_master_set.group(1)}'
+    # 4.8 App Scheduling Normalization
+    app_sched_rel = re.match(r'^(open|launch|start|run|kholo|chalu|close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', query_lower)
+    if app_sched_rel:
+        action_verb = app_sched_rel.group(1).strip().lower()
+        app_target = app_sched_rel.group(2).strip()
+        delay_word = app_sched_rel.group(3).strip().lower()
+        val_str = app_sched_rel.group(4).strip()
+        unit_str = app_sched_rel.group(5).strip()
         
-    vol_app_set = re.match(r'^(?:set\s+)?volume\s+(?:of|for)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:to\s+)?(\d+)$', query_lower)
-    if vol_app_set:
-        orig_match = re.match(r'^(?:set\s+)?volume\s+(?:of|for)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:to\s+)?(\d+)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            return f'volume {orig_match.group(1).strip()} {orig_match.group(2).strip()}'
+        if action_verb in ["close", "kill", "terminate", "stop", "band"]:
+            act_type = "close"
+        else:
+            act_type = "open"
             
-    vol_app_mute = re.match(r'^mute\s+([a-zA-Z0-9_\-\.\s]+?)$', query_lower)
-    if vol_app_mute:
-        orig_match = re.match(r'^mute\s+([a-zA-Z0-9_\-\.\s]+?)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            app = orig_match.group(1).strip()
-            if app.lower() not in ["master", "pc", "system", "speakers", "speaker", "audio", "mic", "microphone"]:
-                return f'mute {app}'
-                
-    vol_app_unmute = re.match(r'^unmute\s+([a-zA-Z0-9_\-\.\s]+?)$', query_lower)
-    if vol_app_unmute:
-        orig_match = re.match(r'^unmute\s+([a-zA-Z0-9_\-\.\s]+?)$', query_clean, re.IGNORECASE)
-        if orig_match:
-            app = orig_match.group(1).strip()
-            if app.lower() not in ["master", "pc", "system", "speakers", "speaker", "audio", "mic", "microphone"]:
-                return f'unmute {app}'
+        if app_target.lower() not in ["pc", "computer", "system", "windows"]:
+            return f'{act_type} {app_target} {delay_word} {val_str} {unit_str}'
 
-    # 10. Windows Applications launch and terminate (Colloquial formats)
-    # Pattern A: chrome open / chrome chalu karo
-    app_launch_suff = re.match(r'^([a-zA-Z0-9_\-\.\s]+?)\s+(?:open|chalu\s+karo|start|chalu)$', query_lower)
+    app_sched_abs = re.match(r'^(open|launch|start|run|kholo|chalu|close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+at\s+(\d{1,2}:\d{2})$', query_lower)
+    if app_sched_abs:
+        action_verb = app_sched_abs.group(1).strip().lower()
+        app_target = app_sched_abs.group(2).strip()
+        time_str = app_sched_abs.group(3).strip()
+        
+        if action_verb in ["close", "kill", "terminate", "stop", "band"]:
+            act_type = "close"
+        else:
+            act_type = "open"
+            
+        if app_target.lower() not in ["pc", "computer", "system", "windows"]:
+            return f'{act_type} {app_target} at {time_str}'
+
+    # 5. Hinglish Application Launch & Terminate
+    app_launch_suff = re.match(r'^([a-zA-Z0-9_\-\.\s]+?)\s+(?:open|chalu\s+karo|start|chalu|kholo)$', query_lower)
     if app_launch_suff:
-        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s]+?)\s+(?:open|chalu\s+karo|start|chalu)$', query_clean, re.IGNORECASE)
+        orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s]+?)\s+(?:open|chalu\s+karo|start|chalu|kholo)$', query_clean, re.IGNORECASE)
         if orig_match:
             app = orig_match.group(1).strip()
             if app.lower() not in ["pc", "computer", "system", "windows"]:
                 return f'open {app}'
 
-    # Pattern B: open chrome
-    app_launch = re.match(r'^(?:launch|start|open\s+application|run)\s+([a-zA-Z0-9_\-\.\s]+)$', query_lower)
+    app_launch = re.match(r'^(?:launch|start|open\s+application|run|open)\s+([a-zA-Z0-9_\-\.\s]+)$', query_lower)
     if app_launch:
-        orig_match = re.match(r'^(?:launch|start|open\s+application|run)\s+([a-zA-Z0-9_\-\.\s]+)$', query_clean, re.IGNORECASE)
+        orig_match = re.match(r'^(?:launch|start|open\s+application|run|open)\s+([a-zA-Z0-9_\-\.\s]+)$', query_clean, re.IGNORECASE)
         if orig_match:
             app = orig_match.group(1).strip()
             if app.lower() not in ["pc", "computer", "system", "windows", "wifi settings", "bluetooth settings", "update settings", "sound settings", "display settings"]:
                 return f'open {app}'
-                
-    # Pattern A: chrome close / chrome band karo
+
+    # 6. Application Terminate (Colloquial & Hinglish)
     app_close_suff = re.match(r'^([a-zA-Z0-9_\-\.\s]+?)\s+(?:close|band\s+karo|stop|band)$', query_lower)
     if app_close_suff:
         orig_match = re.match(r'^([a-zA-Z0-9_\-\.\s]+?)\s+(?:close|band\s+karo|stop|band)$', query_clean, re.IGNORECASE)
@@ -518,16 +437,41 @@ def translate_to_command(user_input):
             if app.lower() not in ["jiggler", "awake", "keep awake"]:
                 return f'close {app}'
 
-    # Pattern B: close chrome
-    app_close = re.match(r'^(?:kill|terminate|stop|shut|force\s+close)\s+([a-zA-Z0-9_\-\.\s]+)$', query_lower)
+    app_close = re.match(r'^(?:kill|terminate|stop|shut|force\s+close|close)\s+([a-zA-Z0-9_\-\.\s]+)$', query_lower)
     if app_close:
-        orig_match = re.match(r'^(?:kill|terminate|stop|shut|force\s+close)\s+([a-zA-Z0-9_\-\.\s]+)$', query_clean, re.IGNORECASE)
+        orig_match = re.match(r'^(?:kill|terminate|stop|shut|force\s+close|close)\s+([a-zA-Z0-9_\-\.\s]+)$', query_clean, re.IGNORECASE)
         if orig_match:
             app = orig_match.group(1).strip()
             if not app.isdigit() and app.lower() not in ["jiggler", "awake", "keep awake"]:
                 return f'close {app}'
 
-    # 11. Persistent schedule commands translation
+    # 6.8 Power scheduling normalization
+    power_sched_rel = re.match(r'^(shutdown|turn\s+off|power\s+off|restart|reboot|sleep|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', query_lower)
+    if power_sched_rel:
+        raw_act = power_sched_rel.group(1).strip()
+        val = power_sched_rel.group(2).strip()
+        unit = power_sched_rel.group(3).strip()
+        if raw_act in ["restart", "reboot"]:
+            act_norm = "restart"
+        elif raw_act in ["sleep", "put to sleep"]:
+            act_norm = "sleep"
+        else:
+            act_norm = "shutdown"
+        return f'{act_norm} pc in {val} {unit}'
+
+    power_sched_abs = re.match(r'^(shutdown|turn\s+off|power\s+off|restart|reboot|sleep|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?\s+at\s+(\d{1,2}:\d{2})$', query_lower)
+    if power_sched_abs:
+        raw_act = power_sched_abs.group(1).strip()
+        time_val = power_sched_abs.group(2).strip()
+        if raw_act in ["restart", "reboot"]:
+            act_norm = "restart"
+        elif raw_act in ["sleep", "put to sleep"]:
+            act_norm = "sleep"
+        else:
+            act_norm = "shutdown"
+        return f'{act_norm} pc at {time_val}'
+
+    # 7. Persistent schedule commands translation
     sched_recurring = re.match(r'^schedule\s+(?:recurring\s+)?("?)(.+?)\1\s+every\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', query_lower)
     if sched_recurring:
         orig_match = re.match(r'^schedule\s+(?:recurring\s+)?("?)(.+?)\1\s+every\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', query_clean, re.IGNORECASE)
@@ -554,13 +498,4 @@ def translate_to_command(user_input):
             time_val = orig_match.group(3).strip()
             return f'schedule "{cmd}" at {time_val}'
 
-    sched_date = re.match(r'^schedule\s+("?)(.+?)\1\s+on\s+(\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4})\s+at\s+(\d{1,2}:\d{2})$', query_lower)
-    if sched_date:
-        orig_match = re.match(r'^schedule\s+("?)(.+?)\1\s+on\s+(\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4})\s+at\s+(\d{1,2}:\d{2})$', query_clean, re.IGNORECASE)
-        if orig_match:
-            cmd = orig_match.group(2).strip()
-            date_val = orig_match.group(3).strip()
-            time_val = orig_match.group(4).strip()
-            return f'schedule "{cmd}" on {date_val} at {time_val}'
-
-    return user_input
+    return query_clean

@@ -1,0 +1,10 @@
+{
+  "engine": "music",
+  "capabilities": [
+    "play_music",
+    "pause_music",
+    "next_track",
+    "prev_track",
+    "set_app_volume"
+  ]
+}

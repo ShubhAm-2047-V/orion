@@ -72,6 +72,7 @@ def listen_for_command(timeout=5, phrase_time_limit=5):
     Returns None if recognition fails or is not possible.
     """
     from actions import speak
+    from gui import ui_state
     
     rec, mic, err = get_speech_recognizer_and_mic()
     if err:
@@ -79,6 +80,7 @@ def listen_for_command(timeout=5, phrase_time_limit=5):
         return None
         
     speak("Listening... Please speak your command.")
+    ui_state.set_state("listening", "Listening for command...")
     
     try:
         cfg = load_voice_config()
@@ -93,21 +95,27 @@ def listen_for_command(timeout=5, phrase_time_limit=5):
             audio = rec.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
             
         speak("Processing voice command...")
+        ui_state.set_state("processing", "Processing voice...")
         
         # Recognize speech using Google Speech API with configured language
         text = rec.recognize_google(audio, language=cfg["language"])
+        ui_state.set_state("idle", "System Online")
         return text
     except sr.WaitTimeoutError:
         speak("Listening timed out. No speech was detected.")
+        ui_state.set_state("idle", "System Online")
         return None
     except sr.UnknownValueError:
         speak("I could not understand the audio. Please try again clearly.")
+        ui_state.set_state("idle", "System Online")
         return None
     except sr.RequestError as e:
         speak(f"Could not request voice results from recognition service: {e}")
+        ui_state.set_state("idle", "System Online")
         return None
     except Exception as e:
         speak(f"An unexpected error occurred during listening: {e}")
+        ui_state.set_state("idle", "System Online")
         return None
 
 def voice_loop_mode():
@@ -116,6 +124,7 @@ def voice_loop_mode():
     """
     from actions import speak
     from main import parse_and_execute
+    from gui import ui_state
     
     rec, mic, err = get_speech_recognizer_and_mic()
     if err:
@@ -128,6 +137,11 @@ def voice_loop_mode():
     
     while True:
         try:
+            if not ui_state.voice_active:
+                time.sleep(0.5)
+                continue
+                
+            ui_state.set_state("listening", "Listening...")
             with mic as source:
                 # Adjust for ambient noise
                 rec.adjust_for_ambient_noise(source, duration=0.8)
@@ -137,9 +151,10 @@ def voice_loop_mode():
                     rec.energy_threshold = 100
                     
                 print("\n[Voice Mode]: Listening...")
-                audio = rec.listen(source, timeout=5, phrase_time_limit=5)
+                audio = rec.listen(source, timeout=3, phrase_time_limit=5)
                 
             print("[Voice Mode]: Processing...")
+            ui_state.set_state("processing", "Processing voice...")
             command_text = rec.recognize_google(audio, language=cfg["language"]).strip()
             
             # Print voice input clearly
@@ -149,24 +164,31 @@ def voice_loop_mode():
             command_lower = command_text.lower()
             if command_lower in ["stop listening", "exit voice", "quit voice", "stop voice"]:
                 speak("Exiting continuous voice mode.")
+                ui_state.set_state("idle", "System Online")
                 break
                 
             # Execute command
             parse_and_execute(command_text)
+            ui_state.set_state("idle", "System Online")
             
         except sr.WaitTimeoutError:
+            ui_state.set_state("idle", "System Online")
             continue
         except sr.UnknownValueError:
             print("[Voice Mode]: Audio not recognized.")
+            ui_state.set_state("idle", "System Online")
             continue
         except sr.RequestError as e:
             speak(f"Voice network error: {e}")
+            ui_state.set_state("idle", "System Online")
             break
         except KeyboardInterrupt:
             speak("Voice mode interrupted.")
+            ui_state.set_state("idle", "System Online")
             break
         except Exception as e:
             print(f"[Voice Mode] Error: {e}")
+            ui_state.set_state("idle", "System Online")
             continue
 
 def always_listening_loop():
@@ -175,22 +197,19 @@ def always_listening_loop():
     import time
     from actions import speak
     from main import parse_and_execute
+    from gui import ui_state
     
     rec, mic, err = get_speech_recognizer_and_mic()
     if err:
         print(f"\n[JARVIS]: Voice hardware error: {err}")
-        speak("Voice hardware error, sir. Falling back to text console.")
-        # Fall back to console input so the app doesn't crash
-        while True:
-            try:
-                user_input = input(f"\n\033[32m[USER]:\033[0m ")
-                parse_and_execute(user_input)
-            except (KeyboardInterrupt, SystemExit):
-                break
+        speak("Voice hardware error, sir. Falling back to text mode.")
+        ui_state.set_state("idle", "Voice Error - Text Mode Active")
+        ui_state.voice_active = False
         return
         
     cfg = load_voice_config()
     print("\n\033[36m[JARVIS]: Calibrating microphone for ambient noise...\033[0m")
+    ui_state.set_state("processing", "Calibrating mic...")
     try:
         with mic as source:
             rec.adjust_for_ambient_noise(source, duration=1.0)
@@ -209,6 +228,7 @@ def always_listening_loop():
     except Exception as e:
         print(f"[JARVIS]: Calibration warning: {e}")
         
+    ui_state.set_state("idle", "System Online")
     print(f"\033[36m[JARVIS]: Configured Language: {cfg['language']} | Calibrated Energy Threshold: {rec.energy_threshold:.0f} | Pause Threshold: {rec.pause_threshold}s\033[0m")
     print("\033[36m[JARVIS]: Always-listening mode active. Say 'Jarvis ...' to command.\033[0m")
     
@@ -221,11 +241,24 @@ def always_listening_loop():
     
     while True:
         try:
+            # Check if voice listening is temporarily deactivated via GUI
+            if not ui_state.voice_active:
+                time.sleep(0.5)
+                continue
+                
+            ui_state.set_state("listening", "Listening for 'Jarvis'...")
+            
             with mic as source:
                 print("\r\033[K[Status: Listening for 'Jarvis']...", end="", flush=True)
-                audio = rec.listen(source, timeout=None, phrase_time_limit=10)
+                # Set a 2 second timeout so we loop and check the voice_active flag responsively
+                audio = rec.listen(source, timeout=2, phrase_time_limit=10)
+                
+            # If voice was deactivated during the blocking listen
+            if not ui_state.voice_active:
+                continue
                 
             print("\r\033[K[Status: Processing audio]...", end="", flush=True)
+            ui_state.set_state("processing", "Processing wake word...")
             text = rec.recognize_google(audio, language=cfg["language"]).strip()
             print(f"\r\033[K\033[90m[Heard]: {text}\033[0m", flush=True)
             
@@ -245,7 +278,6 @@ def always_listening_loop():
             
             if wake_word_detected:
                 # Extract command after the matched wake word from original text
-                # We search for the boundary of detected_wake, followed by optional punctuation/spaces
                 match = re.search(rf'\b{re.escape(detected_wake)}\b[,\s]*(.*)', text, re.IGNORECASE)
                 if match:
                     orig_command = match.group(1).strip()
@@ -253,27 +285,36 @@ def always_listening_loop():
                     if not orig_command:
                         # User only said "Jarvis", ask what they want
                         speak("Yes, sir?")
+                        ui_state.set_state("listening", "Listening for command...")
                         with mic as source:
                             print("\r\033[K[Status: Listening for command]...", end="", flush=True)
                             audio_cmd = rec.listen(source, timeout=5, phrase_time_limit=6)
                         print("\r\033[K[Status: Processing follow-up]...", end="", flush=True)
+                        ui_state.set_state("processing", "Processing command...")
                         follow_up = rec.recognize_google(audio_cmd, language=cfg["language"]).strip()
                         print(f"\r\033[32m[USER] (Voice):\033[0m {follow_up}", flush=True)
                         parse_and_execute(follow_up)
                     else:
                         print(f"\r\033[32m[USER] (Voice):\033[0m {orig_command}", flush=True)
+                        ui_state.set_state("processing", "Executing command...")
                         parse_and_execute(orig_command)
+            
+            ui_state.set_state("idle", "System Online")
                         
         except sr.WaitTimeoutError:
+            # Simply timeout on listen, loops back to check mute flag
             continue
         except sr.UnknownValueError:
+            ui_state.set_state("idle", "System Online")
             continue
         except sr.RequestError as e:
             print(f"\r\033[31m[JARVIS]: Speech API request error: {e}\033[0m", flush=True)
+            ui_state.set_state("idle", "Voice API Error")
             time.sleep(2)
         except KeyboardInterrupt:
             speak("Powering down. Goodbye, sir.")
             break
         except Exception as e:
             print(f"\r\033[31m[JARVIS]: Loop error: {e}\033[0m", flush=True)
+            ui_state.set_state("idle", "System Online")
             continue

@@ -1,0 +1,23 @@
+{
+  "engine": "system",
+  "capabilities": [
+    "system_status",
+    "lock_pc",
+    "sleep_pc",
+    "restart_pc",
+    "shutdown_pc",
+    "battery_status",
+    "turn_off_screen",
+    "set_theme",
+    "top_processes",
+    "idle_time",
+    "disk_check",
+    "optimize_memory",
+    "kill_pid",
+    "keep_awake",
+    "stop_awake",
+    "open_app",
+    "close_app",
+    "schedule_power"
+  ]
+}

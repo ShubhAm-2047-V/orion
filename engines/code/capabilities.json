@@ -1,0 +1,9 @@
+{
+  "engine": "code",
+  "capabilities": [
+    "run_script",
+    "open_ide",
+    "git_workflow",
+    "terminal_exec"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "engine": "browser",
+  "capabilities": [
+    "open_url",
+    "web_search",
+    "open_website",
+    "close_browser"
+  ]
+}

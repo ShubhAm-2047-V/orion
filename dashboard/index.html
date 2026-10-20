@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS AI Operating System - Control Center & Engine Configurator</title>
+  <meta name="description" content="Modular Multi-Engine AI OS Management Dashboard and Configuration Center for JARVIS.">
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header Navbar -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-orb">
+          <div class="orb-core"></div>
+          <div class="orb-wave"></div>
+        </div>
+        <div class="brand-text">
+          <h1>JARVIS OS</h1>
+          <span class="badge-v">v2.5 Modular Multi-Engine System</span>
+        </div>
+      </div>
+
+      <div class="nav-controls">
+        <div class="status-indicator online" id="statusPill">
+          <span class="dot"></span>
+          <span class="status-text">JARVIS Core: Online</span>
+        </div>
+        <div class="telemetry-badge">
+          <span class="t-icon">⚡</span>
+          <span id="activeEnginesCount">17 Engines Active</span>
+        </div>
+        <button class="btn btn-primary" id="btnQuickTest" onclick="switchTab('tab-console')">
+          <span class="icon">🚀</span> Launch Test Console
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="workspace">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <nav class="nav-menu">
+          <button class="nav-item active" id="nav-overview" onclick="switchTab('tab-overview')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">System Overview</span>
+          </button>
+          <button class="nav-item" id="nav-engines" onclick="switchTab('tab-engines')">
+            <span class="nav-icon">🧩</span>
+            <span class="nav-label">Engine Configurator</span>
+            <span class="badge" id="enginesBadge">17</span>
+          </button>
+          <button class="nav-item" id="nav-security" onclick="switchTab('tab-security')">
+            <span class="nav-icon">🛡️</span>
+            <span class="nav-label">Security & Risk</span>
+          </button>
+          <button class="nav-item" id="nav-core" onclick="switchTab('tab-core')">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Core Config & Macros</span>
+          </button>
+          <button class="nav-item" id="nav-nlu" onclick="switchTab('tab-nlu')">
+            <span class="nav-icon">🧠</span>
+            <span class="nav-label">Human → Machine AI</span>
+            <span class="badge" style="background: rgba(168, 85, 247, 0.25); color: #c084fc;">NLU</span>
+          </button>
+          <button class="nav-item" id="nav-console" onclick="switchTab('tab-console')">
+            <span class="nav-icon">💻</span>
+            <span class="nav-label">Live Test Console</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="sys-pulse">
+            <div class="pulse-line"></div>
+            <span class="pulse-text">EventBus Stream Active</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content View -->
+      <main class="content-area">
+        <!-- 1. System Overview Tab -->
+        <section class="tab-content active" id="tab-overview">
+          <div class="view-header">
+            <h2>System Overview & Health Diagnostics</h2>
+            <p>Real-time telemetry, active specialized domain engines, and system diagnostics.</p>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-icon icon-cyan">⚡</div>
+              <div class="kpi-info">
+                <span class="kpi-title">Active Engines</span>
+                <span class="kpi-value" id="kpiEngines">17 / 17</span>
+              </div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-icon icon-purple">🎯</div>
+              <div class="kpi-info">
+                <span class="kpi-title">Total Capabilities</span>
+                <span class="kpi-value" id="kpiCapabilities">68</span>
+              </div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-icon icon-green">⏱️</div>
+              <div class="kpi-info">
+                <span class="kpi-title">Routing Latency</span>
+                <span class="kpi-value">&lt; 0.1 ms</span>
+              </div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-icon icon-gold">🛡️</div>
+              <div class="kpi-info">
+                <span class="kpi-title">Security Layer</span>
+                <span class="kpi-value">Enforced</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="panel glass-panel">
+              <div class="panel-header">
+                <h3>System Telemetry Log</h3>
+                <button class="btn btn-sm" onclick="fetchTelemetry()">Refresh</button>
+              </div>
+              <div class="telemetry-feed" id="telemetryFeed">
+                <div class="feed-item">
+                  <span class="time">[System]</span>
+                  <span class="msg">JARVIS Core Engine Registry initialized. All 17 specialized app engines online.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel glass-panel">
+              <div class="panel-header">
+                <h3>Quick Engine Health Check</h3>
+                <button class="btn btn-sm btn-accent" onclick="runAllHealthChecks()">Run All Checks</button>
+              </div>
+              <div class="health-list" id="quickHealthList">
+                <div class="loading-spinner">Checking engine health...</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Engine Configurator Tab -->
+        <section class="tab-content" id="tab-engines">
+          <div class="view-header flex-header">
+            <div>
+              <h2>Specialized Engine Configurator</h2>
+              <p>Configure capabilities, security risk levels, parameter defaults, and status for every app engine.</p>
+            </div>
+            <div class="filter-controls">
+              <input type="text" id="searchEnginesInput" placeholder="Filter engines..." onkeyup="filterEngines()">
+              <button class="btn btn-secondary" onclick="loadEngines()">Refresh Registry</button>
+            </div>
+          </div>
+
+          <div class="engines-grid" id="enginesContainer">
+            <!-- Engine Cards dynamically rendered by app.js -->
+            <div class="loading-spinner">Loading engine plugins...</div>
+          </div>
+        </section>
+
+        <!-- 3. Security & Risk Layer Tab -->
+        <section class="tab-content" id="tab-security">
+          <div class="view-header">
+            <h2>Permission Manager & Security Layer</h2>
+            <p>Configure action risk levels (NORMAL, SENSITIVE, CRITICAL) and user authorization rules.</p>
+          </div>
+
+          <div class="panel glass-panel">
+            <div class="panel-header">
+              <h3>Capability Risk Matrix</h3>
+              <span class="badge-v">Granular Risk Control</span>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Capability Name</th>
+                    <th>Associated Engine</th>
+                    <th>Current Risk Level</th>
+                    <th>Action Permission</th>
+                  </tr>
+                </thead>
+                <tbody id="securityTableBody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Core Config & Macros Tab -->
+        <section class="tab-content" id="tab-core">
+          <div class="view-header">
+            <h2>JARVIS Core Configuration & Macro Profiles</h2>
+            <p>Manage application target paths, voice settings, and custom workspace macro profiles.</p>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="panel glass-panel">
+              <div class="panel-header">
+                <h3>Application Path Mapping</h3>
+                <button class="btn btn-sm btn-primary" onclick="saveCoreConfig()">Save Config</button>
+              </div>
+              <div class="form-group-list" id="appPathsForm">
+                <!-- Dynamically populated from config.json -->
+              </div>
+            </div>
+
+            <div class="panel glass-panel">
+              <div class="panel-header">
+                <h3>Voice Subsystem Settings</h3>
+                <button class="btn btn-sm btn-primary" onclick="saveCoreConfig()">Save Voice</button>
+              </div>
+              <div class="form-group-list" id="voiceSettingsForm">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. Live Test Console Tab -->
+        <section class="tab-content" id="tab-console">
+          <div class="view-header">
+            <h2>Live Test Console & Multi-Engine Pipeline Execution</h2>
+            <p>Test natural language queries, multi-engine pipelines, and intent routing in real time.</p>
+          </div>
+
+          <div class="console-wrapper glass-panel">
+            <div class="console-header">
+              <div class="console-title">
+                <span class="icon">💻</span>
+                <span>JARVIS Prompt Execution Terminal</span>
+              </div>
+              <div class="console-actions">
+                <label class="toggle-label">
+                  <input type="checkbox" id="chkSpeech" checked>
+                  <span>Voice Output</span>
+                </label>
+                <button class="btn btn-sm" onclick="clearConsoleLog()">Clear Log</button>
+              </div>
+            </div>
+
+            <div class="console-output" id="consoleOutput">
+              <div class="log-entry sys">[SYSTEM]: Ready for multi-engine pipeline test. Try queries like 'system status', 'whatsapp unreads', or 'read latest email from John then clean temp then remember note'.</div>
+            </div>
+
+            <div class="console-input-row">
+              <input type="text" id="txtPromptInput" placeholder="Enter command or natural language prompt..." onkeydown="if(event.key==='Enter') runPromptTest()">
+              <button class="btn btn-accent btn-lg" onclick="runPromptTest()">
+                Execute Prompt
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. Human Language to Machine Language AI Model Tab -->
+        <section class="tab-content" id="tab-nlu">
+          <div class="view-header">
+            <div class="header-with-badge">
+              <h2>Human Language → Machine Language AI Model</h2>
+              <span class="badge badge-accent" id="nluModelStatus">Trained Orion Model: 99.17% Acc</span>
+            </div>
+            <p>Converts multilingual human voice & text (English, Hindi, Marathi, Hinglish) with slang, typos, and grammatical errors into clean, structured machine code and executable Orion commands.</p>
+          </div>
+
+          <!-- Quick Test Presets -->
+          <div class="presets-row">
+            <span class="presets-label">⚡ Test Scenarios:</span>
+            <button class="preset-chip" onclick="loadNLUPreset('Hey, open Chrome and search for the best AI tools.')">🌐 Web & App Search</button>
+            <button class="preset-chip" onclick="loadNLUPreset('bhai mere laptop ka calculator khol de')">🇮🇳 Hinglish Slang</button>
+            <button class="preset-chip" onclick="loadNLUPreset('calculator chalu kara lavkar')">🚩 Marathi Voice</button>
+            <button class="preset-chip" onclick="loadNLUPreset('Create new folder name project files on desktop')">✍️ Grammatical Errors</button>
+            <button class="preset-chip" onclick="loadNLUPreset('Create a Python file named hello.py and write a program that prints Hello World.')">🐍 Python Code Gen</button>
+            <button class="preset-chip" onclick="loadNLUPreset('Delete the old project.')">❓ Ambiguous Command</button>
+            <button class="preset-chip" onclick="loadNLUPreset('shutdown the workstation')">🛡️ Destructive / Safety</button>
+          </div>
+
+          <!-- Input Controls Panel -->
+          <div class="nlu-input-card glass-panel">
+            <div class="nlu-toolbar">
+              <div class="lang-selector-group">
+                <label for="nluLangSelect">Input Language:</label>
+                <select id="nluLangSelect" class="select-dark">
+                  <option value="auto" selected>Auto-Detect (EN / HI / MR / Hinglish)</option>
+                  <option value="en">English (en-IN)</option>
+                  <option value="hi">Hindi (hi-IN)</option>
+                  <option value="mr">Marathi (mr-IN)</option>
+                  <option value="hinglish">Hinglish (Colloquial)</option>
+                </select>
+              </div>
+
+              <div class="voice-status-group">
+                <div class="mic-wave" id="micWaveform" style="display: none;">
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                  <span class="wave-bar"></span>
+                </div>
+                <span class="voice-status-pill" id="voiceStatusPill">
+                  <span class="dot"></span>
+                  <span id="voiceStatusText">Microphone Idle</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Speech & Text Input Area -->
+            <div class="input-action-row">
+              <button class="btn-mic" id="btnMicRecord" onclick="toggleVoiceRecording()" title="Speak voice command">
+                <span class="mic-icon">🎙️</span>
+              </button>
+              <textarea id="txtHumanInput" class="nlu-textarea" placeholder="Speak through microphone or type natural human language here... (e.g. 'Hey, open Chrome and search for the best AI tools' or 'bhai mere laptop ka calculator khol de')" rows="3"></textarea>
+            </div>
+
+            <div class="nlu-footer-actions">
+              <div class="review-hint" id="voiceReviewHint" style="display: none;">
+                <span class="icon">✏️</span> You can edit or review the recognized speech text above before interpreting.
+              </div>
+              <div class="btn-group-right">
+                <button class="btn btn-secondary" onclick="retrainNLUModel()">
+                  <span class="icon">🔄</span> Retrain Model
+                </button>
+                <button class="btn btn-secondary" onclick="clearNLUInput()">Clear</button>
+                <button class="btn btn-primary" onclick="interpretHumanInput()">
+                  <span class="icon">⚡</span> Interpret & Convert
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Telemetry Strip -->
+          <div class="telemetry-strip glass-panel" id="nluTelemetryStrip" style="display: none;">
+            <div class="t-item">
+              <span class="t-label">Language:</span>
+              <span class="t-val badge-lang" id="telemetryLang">English</span>
+            </div>
+            <div class="t-item">
+              <span class="t-label">Interpreted Intent:</span>
+              <span class="t-val badge-intent" id="telemetryIntent">-</span>
+            </div>
+            <div class="t-item">
+              <span class="t-label">Target Engine:</span>
+              <span class="t-val badge-engine" id="telemetryEngine">-</span>
+            </div>
+            <div class="t-item">
+              <span class="t-label">Confidence:</span>
+              <span class="t-val badge-conf" id="telemetryConf">0%</span>
+            </div>
+            <div class="t-item">
+              <span class="t-label">Validation:</span>
+              <span class="t-val badge-valid" id="telemetryValidation">Valid Schema</span>
+            </div>
+            <div class="t-item">
+              <span class="t-label">Safety Risk:</span>
+              <span class="t-val badge-risk" id="telemetryRisk">NORMAL</span>
+            </div>
+          </div>
+
+          <!-- Clarification Alert Container -->
+          <div class="alert-clarification glass-panel" id="clarificationAlert" style="display: none;">
+            <div class="alert-icon">⚠️</div>
+            <div class="alert-content">
+              <h4>Ambiguity Detected - Clarification Required</h4>
+              <p id="clarificationQuestionText">Which specific item do you want to target?</p>
+              <div class="clarification-actions" id="clarificationOptions">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Side-by-Side Comparison Container -->
+          <div class="comparison-grid" id="nluComparisonGrid" style="display: none;">
+            <!-- Left Card: Human Communication Analysis -->
+            <div class="panel glass-panel">
+              <div class="panel-header">
+                <h3>🗣️ Human Language Analysis</h3>
+                <span class="badge" id="humanLangBadge">en</span>
+              </div>
+              <div class="panel-body">
+                <div class="analysis-section">
+                  <span class="analysis-title">Raw Spoken / Typed Input:</span>
+                  <div class="raw-box" id="analysisRaw">"..."</div>
+                </div>
+
+                <div class="analysis-section">
+                  <span class="analysis-title">Normalized Canonical Form:</span>
+                  <div class="norm-box" id="analysisNormalized">"..."</div>
+                </div>
+
+                <div class="analysis-section">
+                  <span class="analysis-title">Extracted Entities & Parameters:</span>
+                  <table class="entity-table">
+                    <thead>
+                      <tr><th>Parameter</th><th>Value</th><th>Type</th></tr>
+                    </thead>
+                    <tbody id="analysisEntitiesBody">
+                      <!-- Rendered dynamically -->
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="analysis-section">
+                  <span class="analysis-title">Human Meaning / Explanation:</span>
+                  <div class="explanation-box" id="analysisExplanation">-</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Card: Machine Executable Output & Multi-Language Code -->
+            <div class="panel glass-panel">
+              <div class="panel-header">
+                <div class="code-tabs">
+                  <button class="code-tab active" onclick="switchCodeTab('json')">Structured JSON</button>
+                  <button class="code-tab" onclick="switchCodeTab('python')">Python</button>
+                  <button class="code-tab" onclick="switchCodeTab('javascript')">JavaScript</button>
+                  <button class="code-tab" onclick="switchCodeTab('sql')">SQL</button>
+                  <button class="code-tab" onclick="switchCodeTab('shell')">PowerShell</button>
+                </div>
+                <button class="btn btn-sm btn-secondary" onclick="copyCurrentCode()">
+                  📋 Copy Code
+                </button>
+              </div>
+
+              <div class="panel-body">
+                <pre class="code-viewer"><code id="codeOutputViewer">// Interpreted machine code will appear here...</code></pre>
+
+                <!-- Execution Action Row -->
+                <div class="execute-action-row">
+                  <div class="exec-info">
+                    <span id="execSecurityNote" class="text-muted">Security: Verified allowlisted action.</span>
+                  </div>
+                  <button class="btn btn-accent btn-lg" id="btnExecuteCommand" onclick="executeCurrentMachineCommand()">
+                    🚀 Execute Machine Command
+                  </button>
+                </div>
+
+                <!-- Execution Result Output -->
+                <div class="exec-result-box" id="execResultBox" style="display: none;">
+                  <span class="exec-badge" id="execResultStatus">SUCCESS</span>
+                  <span id="execResultMessage">Command executed.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Engine Modal Configurator -->
+  <div class="modal-overlay" id="engineModal">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3 id="modalEngineTitle">Configure Engine</h3>
+        <button class="btn-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modalEngineBody">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+        <button class="btn btn-primary" onclick="saveEngineModalConfig()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

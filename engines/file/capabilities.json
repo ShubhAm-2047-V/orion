@@ -1,0 +1,10 @@
+{
+  "engine": "file",
+  "capabilities": [
+    "clean_temp",
+    "empty_recycle_bin",
+    "pick_file",
+    "copy_path",
+    "explore_folder"
+  ]
+}

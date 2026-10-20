@@ -1,0 +1,7 @@
+{
+  "engine": "search",
+  "capabilities": [
+    "web_search_query",
+    "info_lookup"
+  ]
+}

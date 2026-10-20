@@ -1,0 +1,10 @@
+{
+  "engine": "voice",
+  "capabilities": [
+    "listen_voice",
+    "voice_loop",
+    "speak_text",
+    "mute_microphone",
+    "unmute_microphone"
+  ]
+}

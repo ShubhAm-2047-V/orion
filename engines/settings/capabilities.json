@@ -1,0 +1,10 @@
+{
+  "engine": "settings",
+  "capabilities": [
+    "open_settings",
+    "toggle_wifi_settings",
+    "toggle_bluetooth_settings",
+    "toggle_display_settings",
+    "close_settings"
+  ]
+}

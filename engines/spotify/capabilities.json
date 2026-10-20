@@ -1,0 +1,8 @@
+{
+  "engine": "spotify",
+  "capabilities": [
+    "play_spotify",
+    "pause_spotify",
+    "search_spotify"
+  ]
+}

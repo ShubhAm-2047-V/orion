@@ -1,0 +1,396 @@
+{
+  "model_name": "Orion-NLU-Calibrated-V1",
+  "trained_at": "2026-10-19 23:20:16",
+  "total_samples": 120,
+  "total_intents": 42,
+  "intent_classes": [
+    "ambiguous_clean",
+    "ambiguous_delete",
+    "ambiguous_message",
+    "ambiguous_open_file",
+    "battery_status",
+    "clean_temp",
+    "clear_clipboard",
+    "close_application",
+    "control_volume",
+    "create_file_and_code",
+    "create_folder",
+    "database_query",
+    "disk_check",
+    "empty_trash",
+    "generate_code",
+    "idle_time",
+    "keep_awake",
+    "lock_pc",
+    "media_playback",
+    "open_application",
+    "open_application_and_search",
+    "open_website",
+    "optimize_memory",
+    "read_file",
+    "restart_pc",
+    "search_web",
+    "set_theme",
+    "shell_command",
+    "shutdown_pc",
+    "sleep_pc",
+    "stop_awake",
+    "system_status",
+    "take_screenshot",
+    "top_processes",
+    "turn_off_screen",
+    "whatsapp_call",
+    "whatsapp_login",
+    "whatsapp_logout",
+    "whatsapp_message",
+    "whatsapp_send_file",
+    "whatsapp_status",
+    "whatsapp_unreads"
+  ],
+  "intent_registry": {
+    "open_application_and_search": {
+      "engine": "browser",
+      "action": "open_and_search",
+      "default_params": {
+        "app": "chrome",
+        "query": "best AI tools"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "open_application": {
+      "engine": "system",
+      "action": "open_app",
+      "default_params": {
+        "app": "calculator"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "close_application": {
+      "engine": "system",
+      "action": "close_app",
+      "default_params": {
+        "app": "chrome"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "search_web": {
+      "engine": "search",
+      "action": "search_web",
+      "default_params": {
+        "query": "latest machine learning news"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "open_website": {
+      "engine": "browser",
+      "action": "open_url",
+      "default_params": {
+        "url": "https://github.com"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "system_status": {
+      "engine": "system",
+      "action": "system_status",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "battery_status": {
+      "engine": "system",
+      "action": "battery_status",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "disk_check": {
+      "engine": "system",
+      "action": "disk_check",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "top_processes": {
+      "engine": "system",
+      "action": "top_processes",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "optimize_memory": {
+      "engine": "system",
+      "action": "optimize_memory",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "idle_time": {
+      "engine": "system",
+      "action": "idle_time",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "control_volume": {
+      "engine": "settings",
+      "action": "set_volume",
+      "default_params": {
+        "level": 60
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "media_playback": {
+      "engine": "music",
+      "action": "next_track",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "lock_pc": {
+      "engine": "system",
+      "action": "lock_pc",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "sleep_pc": {
+      "engine": "system",
+      "action": "sleep_pc",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "turn_off_screen": {
+      "engine": "system",
+      "action": "turn_off_screen",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "restart_pc": {
+      "engine": "system",
+      "action": "restart_pc",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "shutdown_pc": {
+      "engine": "system",
+      "action": "shutdown_pc",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "clean_temp": {
+      "engine": "file",
+      "action": "clean_temp",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "empty_trash": {
+      "engine": "file",
+      "action": "empty_recycle_bin",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "take_screenshot": {
+      "engine": "vision",
+      "action": "screenshot",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "clear_clipboard": {
+      "engine": "system",
+      "action": "clear_clipboard",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "keep_awake": {
+      "engine": "system",
+      "action": "start_awake",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "stop_awake": {
+      "engine": "system",
+      "action": "stop_awake",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "set_theme": {
+      "engine": "settings",
+      "action": "set_theme",
+      "default_params": {
+        "theme": "dark"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "create_folder": {
+      "engine": "file",
+      "action": "create_folder",
+      "default_params": {
+        "folder_name": "project files",
+        "location": "desktop"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "create_file_and_code": {
+      "engine": "code",
+      "action": "create_file",
+      "default_params": {
+        "file_name": "hello.py",
+        "file_type": "python",
+        "content": "print('Hello World')",
+        "language": "python"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "read_file": {
+      "engine": "file",
+      "action": "read_file",
+      "default_params": {
+        "file_name": "notes.txt"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_message": {
+      "engine": "whatsapp",
+      "action": "send_msg",
+      "default_params": {
+        "target": "Shubham",
+        "message": "hey let us meet tomorrow"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_unreads": {
+      "engine": "whatsapp",
+      "action": "get_unreads",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_call": {
+      "engine": "whatsapp",
+      "action": "call",
+      "default_params": {
+        "target": "John",
+        "type": "voice"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_status": {
+      "engine": "whatsapp",
+      "action": "get_status",
+      "default_params": {
+        "target": "Rahul"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_send_file": {
+      "engine": "whatsapp",
+      "action": "send_file",
+      "default_params": {
+        "target": "Vikas",
+        "file_path": "e:/report.pdf"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_login": {
+      "engine": "whatsapp",
+      "action": "login",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "whatsapp_logout": {
+      "engine": "whatsapp",
+      "action": "logout",
+      "default_params": {},
+      "ambiguous": false,
+      "question": null
+    },
+    "generate_code": {
+      "engine": "code",
+      "action": "code_gen",
+      "default_params": {
+        "language": "python",
+        "task": "fetch weather data from open-meteo api"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "database_query": {
+      "engine": "code",
+      "action": "sql_query",
+      "default_params": {
+        "query_type": "select",
+        "table": "users",
+        "order_by": "creation_date",
+        "limit": 10
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "shell_command": {
+      "engine": "code",
+      "action": "terminal_exec",
+      "default_params": {
+        "command": "Get-Service | Where-Object {$_.Status -eq 'Running'}"
+      },
+      "ambiguous": false,
+      "question": null
+    },
+    "ambiguous_delete": {
+      "engine": "file",
+      "action": "clarify_ambiguity",
+      "default_params": {
+        "target": "old project"
+      },
+      "ambiguous": true,
+      "question": "Multiple projects exist. Which specific project folder do you want to delete?"
+    },
+    "ambiguous_clean": {
+      "engine": "system",
+      "action": "clarify_ambiguity",
+      "default_params": {},
+      "ambiguous": true,
+      "question": "What would you like to clean? (Temporary cache files, Recycle Bin, or RAM memory?)"
+    },
+    "ambiguous_message": {
+      "engine": "whatsapp",
+      "action": "clarify_ambiguity",
+      "default_params": {},
+      "ambiguous": true,
+      "question": "Who would you like to send a message to, and what should the message say?"
+    },
+    "ambiguous_open_file": {
+      "engine": "file",
+      "action": "clarify_ambiguity",
+      "default_params": {},
+      "ambiguous": true,
+      "question": "Which file would you like to open? Please specify the file name or path."
+    }
+  },
+  "training_accuracy": 0.9916666666666667,
+  "training_duration_seconds": 0.317
+}

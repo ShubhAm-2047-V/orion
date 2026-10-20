@@ -7,30 +7,161 @@ import ctypes
 import shutil
 import threading
 import time
+import queue
+import re
 
 _keep_awake_active = False
 
-# Check if pyttsx3 is available for speech feedback
-try:
-    import pyttsx3
-    engine = pyttsx3.init()
-    engine.setProperty('rate', 180)     # Speed
-    engine.setProperty('volume', 0.9)   # Volume 0-1
-    voices = engine.getProperty('voices')
-    if len(voices) > 0:
-        # Set voice (usually index 0 is Microsoft David - male voice, index 1 is Hazel or Zira - female voice)
-        engine.setProperty('voice', voices[0].id)
-except ImportError:
-    engine = None
+# Queue-based native SAPI Speech Worker
+_speech_queue = queue.Queue()
 
-def speak(text):
-    print(f"\n\033[36m[JARVIS]:\033[0m {text}")
-    if engine:
+def _speech_worker():
+    import win32com.client
+    import pythoncom
+    
+    try:
+        pythoncom.CoInitialize()
+        speaker = win32com.client.Dispatch("SAPI.SpVoice")
+        speaker.Rate = 1
+        speaker.Volume = 90
+        
+        # Select a natural, realistic voice (like Zira or Hazel)
+        voices = speaker.GetVoices()
+        selected_voice = None
+        for i in range(voices.Count):
+            desc = voices.Item(i).GetDescription().lower()
+            if "zira" in desc:
+                selected_voice = voices.Item(i)
+                break
+        if not selected_voice:
+            for i in range(voices.Count):
+                desc = voices.Item(i).GetDescription().lower()
+                if "hazel" in desc:
+                    selected_voice = voices.Item(i)
+                    break
+        if selected_voice:
+            speaker.Voice = selected_voice
+    except Exception as e:
+        speaker = None
         try:
-            engine.say(text)
-            engine.runAndWait()
+            with open("e:\\orion\\speech_debug.log", "a") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] SAPI worker init error: {e}\n")
         except Exception:
             pass
+
+    while True:
+        text = _speech_queue.get()
+        if text is None:
+            break
+        if speaker:
+            try:
+                # Try importing ui_state to update GUI
+                try:
+                    from gui import ui_state
+                    if ui_state:
+                        ui_state.spoken_text = text
+                        ui_state.set_state("speaking")
+                except ImportError:
+                    ui_state = None
+
+                # Speak synchronously inside the worker thread (blocks only the worker)
+                speaker.Speak(text, 0)
+
+                if ui_state:
+                    ui_state.set_state("idle")
+            except Exception as e:
+                try:
+                    with open("e:\\orion\\speech_debug.log", "a") as f:
+                        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] SAPI speak error inside worker: {e}\n")
+                except Exception:
+                    pass
+        _speech_queue.task_done()
+
+# Start background speech thread immediately
+_speech_thread = threading.Thread(target=_speech_worker, daemon=True)
+_speech_thread.start()
+
+def simplify_speech_text(text):
+    import re
+    text_lower = text.lower().strip()
+    
+    # 1. App opening confirmations
+    # "Successfully launched 'whatsapp'." -> "whatsapp opened"
+    match_launched = re.search(r"launched\s+'([^']+)'", text_lower)
+    if match_launched:
+        app = match_launched.group(1).strip()
+        return f"{app} opened"
+        
+    # 2. App closing confirmations
+    # "Successfully closed processes: whatsapp." -> "whatsapp closed"
+    match_closed_p = re.search(r"closed\s+processes:\s*([^.]+)", text_lower)
+    if match_closed_p:
+        apps = match_closed_p.group(1).strip()
+        return f"{apps} closed"
+
+    # "Closed process matching 'whatsapp' via fallback taskkill." -> "whatsapp closed"
+    match_fallback = re.search(r"closed\s+process\s+matching\s+'([^']+)'", text_lower)
+    if match_fallback:
+        app = match_fallback.group(1).strip()
+        return f"{app} closed"
+
+    # "Could not find any running processes matching 'whatsapp'." -> "whatsapp is not running"
+    match_not_running = re.search(r"could\s+not\s+find\s+any\s+running\s+processes\s+matching\s+'([^']+)'", text_lower)
+    if match_not_running:
+        app = match_not_running.group(1).strip()
+        return f"{app} is not running"
+        
+    # Generic "closed 'whatsapp'" mapping
+    match_close = re.search(r"closed\s+'([^']+)'", text_lower)
+    if match_close:
+        app = match_close.group(1).strip()
+        return f"{app} closed"
+        
+    # 3. Volume controls
+    if "muted system" in text_lower or "volume muted" in text_lower or "mute master" in text_lower or text_lower.startswith("muted"):
+        if "unmute" not in text_lower:
+            return "volume muted"
+    if "unmuted system" in text_lower or "volume unmuted" in text_lower or text_lower.startswith("unmuted"):
+        return "volume unmuted"
+    match_vol = re.search(r"(?:set\s+)?(?:system\s+)?(?:master\s+)?volume\s+(?:to\s+)?(\d+)\s*%", text_lower)
+    if match_vol:
+        return f"volume set to {match_vol.group(1)} percent"
+        
+    # 4. File Explorer / YouTube hotkeys
+    if "file explorer shortcut" in text_lower or "triggered file explorer" in text_lower:
+        return "file explorer opened"
+    if "youtube shortcut" in text_lower or "triggered youtube" in text_lower:
+        return "youtube opened"
+        
+    # 5. General launch errors
+    match_fail_open = re.search(r"failed\s+to\s+launch\s+'([^']+)'", text_lower)
+    if match_fail_open:
+        app = match_fail_open.group(1).strip()
+        return f"{app} failed to open"
+        
+    match_fail_close = re.search(r"failed\s+to\s+close\s+'([^']+)'", text_lower)
+    if match_fail_close:
+        app = match_fail_close.group(1).strip()
+        return f"{app} failed to close"
+        
+    if "dispatched close message" in text_lower:
+        return "window closed"
+        
+    return text
+
+def speak(text, print_to_console=True):
+    if print_to_console:
+        print(f"\n\033[36m[JARVIS]:\033[0m {text}")
+    
+    try:
+        from gui import ui_state
+        if ui_state and ui_state.speech_muted:
+            return
+    except ImportError:
+        pass
+    
+    simplified_text = simplify_speech_text(text)
+    _speech_queue.put(simplified_text)
 
 def load_config():
     try:
@@ -54,9 +185,9 @@ def open_app_direct(app_name_lower):
                 os.startfile(executable)
             return True
         except Exception:
-            if app_name_lower == "whatsapp":
+            if app_name_lower in ["whatsapp", "whatsapp beta", "whatsapp desktop"]:
                 try:
-                    webbrowser.open("https://web.whatsapp.com")
+                    webbrowser.open("whatsapp://")
                     return True
                 except Exception:
                     pass
@@ -73,10 +204,8 @@ def open_app_direct(app_name_lower):
     # 3. Protocols
     if app_name_lower in ["whatsapp", "spotify", "discord", "calculator", "skype", "netflix", "instagram", "facebook"]:
         try:
-            protocol = f"{app_name_lower}:"
-            if app_name_lower == "calculator":
-                protocol = "calculator:"
-            os.startfile(protocol)
+            protocol = f"{app_name_lower}://" if app_name_lower == "whatsapp" else f"{app_name_lower}:"
+            os.system(f"start {protocol}")
             return True
         except Exception:
             pass
@@ -137,14 +266,21 @@ def open_app(app_name):
     if app_name_lower.startswith("open "):
         app_name_lower = app_name_lower[5:].strip()
         
-    # 1. Try launching directly first (via config mapping or PATH)
-    if open_app_direct(app_name_lower):
-        return f"Successfully launched '{app_name_lower}'."
-        
-    # 2. Fallback: Windows search keystroke simulation
-    speak(f"Searching and launching '{app_name_lower}' via Windows search...")
+    speak(f"Searching '{app_name_lower}' in Windows search and hitting Enter...")
     
-    # Escape single quotes for PowerShell SendKeys string safety
+    # 1. Primary action: PyAutoGUI Windows Start Key, Type App Name, Hit Enter
+    try:
+        import pyautogui
+        pyautogui.press('win')
+        time.sleep(0.4)
+        pyautogui.typewrite(app_name_lower, interval=0.04)
+        time.sleep(0.5)
+        pyautogui.press('enter')
+        return f"Successfully searched '{app_name_lower}' in Windows search and pressed Enter."
+    except Exception:
+        pass
+
+    # 2. Backup action: PowerShell WScript.Shell SendKeys
     app_name_safe = app_name_lower.replace("'", "''").replace('"', '""')
     
     ps_command = f"""
@@ -158,8 +294,11 @@ def open_app(app_name):
     
     try:
         subprocess.run(["powershell", "-Command", ps_command], capture_output=True, text=True, timeout=5)
-        return f"Successfully simulated Windows Search search and enter for '{app_name_lower}'."
+        return f"Successfully searched '{app_name_lower}' in Windows search and pressed Enter."
     except Exception as e:
+        # Fallback to direct app launch if search automation fails
+        if open_app_direct(app_name_lower):
+            return f"Successfully launched '{app_name_lower}'."
         return f"Could not launch '{app_name_lower}': {e}"
 
 def run_macro(macro_name):
@@ -284,47 +423,75 @@ def clean_temp():
     return f"Clean complete. Removed {deleted_files} files and {deleted_folders} folders. {errors} active files/folders were in use and skipped."
 
 def close_app(app_name):
+    if not app_name:
+        return "No application name provided."
+
     app_name_lower = app_name.lower().strip()
-    if app_name_lower.startswith("close "):
-        app_name_lower = app_name_lower[6:].strip()
-        
-    speak(f"Terminating processes matching '{app_name_lower}'...")
+    for prefix in ["close ", "kill ", "terminate ", "stop "]:
+        if app_name_lower.startswith(prefix):
+            app_name_lower = app_name_lower[len(prefix):].strip()
+            
+    alias_map = {
+        "excel": ["EXCEL"],
+        "word": ["WINWORD"],
+        "powerpoint": ["POWERPNT"],
+        "whatsapp": ["WhatsApp", "WhatsAppBeta", "WhatsAppNative", "WhatsAppStore"],
+        "settings": ["SystemSettings"],
+        "systemsettings": ["SystemSettings"],
+        "chrome": ["chrome"],
+        "edge": ["msedge"],
+        "firefox": ["firefox"],
+        "notepad": ["notepad"],
+        "spotify": ["Spotify"],
+        "telegram": ["Telegram"],
+        "calculator": ["CalculatorApp", "calculator"],
+    }
     
-    # PowerShell script to search for running processes by name, file description, or main window title
-    # then terminate them and return their unique process names.
+    target_procs = alias_map.get(app_name_lower, [app_name_lower])
+    if app_name_lower not in [p.lower() for p in target_procs]:
+        target_procs.append(app_name_lower)
+        
+    print(f"Terminating processes matching '{app_name_lower}'...")
+
+    killed = False
+    # Fast direct taskkill checks (< 0.1s)
+    for proc in target_procs:
+        res1 = subprocess.run(f"taskkill /IM {proc}.exe /F", shell=True, capture_output=True, text=True)
+        res2 = subprocess.run(f"taskkill /IM {proc} /F", shell=True, capture_output=True, text=True)
+        if res1.returncode == 0 or res2.returncode == 0:
+            killed = True
+
+    res_title = subprocess.run(f'taskkill /FI "WINDOWTITLE eq *{app_name_lower}*" /F', shell=True, capture_output=True, text=True)
+    if res_title.returncode == 0 and "SUCCESS" in res_title.stdout:
+        killed = True
+
+    if killed:
+        return f"Successfully closed '{app_name_lower}'."
+
+    # Fast PowerShell process-name fallback with 3s timeout
+    procs_pattern = "|".join([re.escape(p) for p in target_procs])
     ps_script = f"""
-    $matched = Get-Process | Where-Object {{
-        $_.Name -like "*{app_name_lower}*" -or 
-        $_.Description -like "*{app_name_lower}*" -or 
-        $_.MainWindowTitle -like "*{app_name_lower}*"
-    }}
+    $ErrorActionPreference = 'SilentlyContinue'
+    $matched = Get-Process | Where-Object {{ $_.Name -match "{procs_pattern}" -or $_.Name -match "{re.escape(app_name_lower)}" }}
     if ($matched) {{
-        $names = $matched | Select-Object -ExpandProperty Name -Unique
         $matched | Stop-Process -Force
-        Write-Output ($names -join ', ')
+        Write-Output "SUCCESS"
     }} else {{
         Write-Output "NONE"
     }}
     """
-    
     try:
-        result = subprocess.run(["powershell", "-Command", ps_script], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(["powershell", "-Command", ps_script], capture_output=True, text=True, timeout=3)
         output = result.stdout.strip()
-        
-        if output and output != "NONE":
-            return f"Successfully closed processes: {output}."
-        else:
-            # Fallback to direct taskkill
-            res = subprocess.run(f"taskkill /IM {app_name_lower}.exe /F", shell=True, capture_output=True, text=True)
-            res_no_ext = subprocess.run(f"taskkill /IM {app_name_lower} /F", shell=True, capture_output=True, text=True)
-            if res.returncode == 0 or res_no_ext.returncode == 0:
-                return f"Closed process matching '{app_name_lower}' via fallback taskkill."
-            return f"Could not find any running processes matching '{app_name_lower}'."
-    except Exception as e:
-        return f"Error closing processes for '{app_name_lower}': {str(e)}"
+        if "SUCCESS" in output:
+            return f"Successfully closed '{app_name_lower}'."
+    except Exception:
+        pass
+
+    return f"Could not find any running processes matching '{app_name_lower}'."
 
 def close_current_app():
-    speak("Closing active foreground application window...")
+    print("Closing active foreground application window...")
     try:
         user32 = ctypes.windll.user32
         jarvis_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -342,8 +509,107 @@ def close_current_app():
     except Exception as e:
         return f"Failed to execute active window close: {e}"
 
+def close_all_programs():
+    import ctypes
+    import ctypes.wintypes
+    import os
+    import psutil
+    import time
+    
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    
+    current_pid = os.getpid()
+    
+    # Track the PIDs we want to exclude (the assistant itself, its parents, children)
+    exclude_pids = {current_pid}
+    try:
+        proc = psutil.Process(current_pid)
+        for parent in proc.parents():
+            exclude_pids.add(parent.pid)
+        for child in proc.children(recursive=True):
+            exclude_pids.add(child.pid)
+    except Exception:
+        pass
+        
+    # We will collect handles and PIDs of visible windows to close
+    target_hwnds = []
+    target_pids = set()
+    closed_names = set()
+    
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    
+    def enum_windows_callback(hwnd, lParam):
+        if user32.IsWindowVisible(hwnd):
+            # Check window title
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buffer, length + 1)
+                title = buffer.value
+                title_lower = title.lower()
+                
+                # Filter out standard desktop components
+                if title_lower in ["program manager", "start", "windows input experience"]:
+                    return True
+                    
+                pid = ctypes.wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                
+                if pid.value != 0 and pid.value not in exclude_pids:
+                    # Let's check the process name
+                    try:
+                        p_name = psutil.Process(pid.value).name().lower()
+                    except Exception:
+                        p_name = ""
+                        
+                    # Skip explorer, shell windows, terminals, IDEs and system tools
+                    if p_name in [
+                        "explorer.exe", "cmd.exe", "powershell.exe", "conhost.exe", 
+                        "taskmgr.exe", "applicationframehost.exe", "systemsettings.exe",
+                        "dwm.exe", "windowsterminal.exe", "wscript.exe", "cscript.exe"
+                    ]:
+                        return True
+                        
+                    target_hwnds.append(hwnd)
+                    target_pids.add(pid.value)
+                    if p_name:
+                        # Clean up extension for reporting
+                        name_clean = p_name.replace(".exe", "")
+                        closed_names.add(name_clean)
+        return True
+        
+    cb = WNDENUMPROC(enum_windows_callback)
+    user32.EnumWindows(cb, 0)
+    
+    if not target_pids:
+        return "No other user applications are currently running."
+        
+    print(f"Dispatched close requests to PIDs: {list(target_pids)}")
+    
+    # 1. Try closing gracefully by sending WM_CLOSE (0x0010)
+    for hwnd in target_hwnds:
+        user32.PostMessageW(hwnd, 0x0010, 0, 0)
+        
+    # Give applications 1.0 second to handle WM_CLOSE
+    time.sleep(1.0)
+    
+    # 2. For any PIDs that are still alive, force-kill them
+    for pid in target_pids:
+        try:
+            if psutil.pid_exists(pid):
+                p = psutil.Process(pid)
+                p.kill() # force stop
+        except Exception:
+            pass
+            
+    summary_str = ", ".join(sorted(list(closed_names)))
+    if not summary_str:
+        summary_str = "running user programs"
+    return f"Successfully closed {summary_str}."
+
 def minimize_all():
-    speak("Minimizing all application windows...")
+    print("Minimizing all application windows...")
     ps_code = """
     $shell = New-Object -ComObject Shell.Application
     $shell.MinimizeAll()
@@ -355,7 +621,7 @@ def minimize_all():
         return f"Failed to minimize all: {e}"
 
 def maximize_all():
-    speak("Restoring all application windows...")
+    print("Restoring all application windows...")
     ps_code = """
     $shell = New-Object -ComObject Shell.Application
     $shell.UndoMinimizeALL()
@@ -367,7 +633,7 @@ def maximize_all():
         return f"Failed to restore all: {e}"
 
 def minimize_current_app():
-    speak("Minimizing current active window...")
+    print("Minimizing current active window...")
     try:
         user32 = ctypes.windll.user32
         jarvis_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -385,7 +651,7 @@ def minimize_current_app():
         return f"Failed to minimize active app: {e}"
 
 def maximize_current_app():
-    speak("Maximizing current active window...")
+    print("Maximizing current active window...")
     try:
         user32 = ctypes.windll.user32
         jarvis_hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -467,7 +733,7 @@ def maximize_app(app_name):
     elif app_name_lower.startswith("restore "):
         app_name_lower = app_name_lower[8:].strip()
         
-    speak(f"Maximizing windows matching '{app_name_lower}'...")
+    print(f"Maximizing windows matching '{app_name_lower}'...")
     
     try:
         hwnds = find_window_handles(app_name_lower)
@@ -485,7 +751,7 @@ def minimize_app(app_name):
     if app_name_lower.startswith("minimize "):
         app_name_lower = app_name_lower[9:].strip()
         
-    speak(f"Minimizing windows matching '{app_name_lower}'...")
+    print(f"Minimizing windows matching '{app_name_lower}'...")
     
     try:
         hwnds = find_window_handles(app_name_lower)
@@ -626,7 +892,7 @@ def switch_to_app(app_name):
     elif app_name_lower.startswith("focus "):
         app_name_lower = app_name_lower[6:].strip()
         
-    speak(f"Switching window focus to '{app_name_lower}'...")
+    print(f"Switching window focus to '{app_name_lower}'...")
     
     try:
         hwnds = find_window_handles(app_name_lower)
@@ -732,15 +998,38 @@ def control_volume(target_app, action, level=None):
 def _keep_awake_worker():
     global _keep_awake_active
     user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    
+    # Win32 Execution State Flags
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+    ES_DISPLAY_REQUIRED = 0x00000002
+    
+    # Prevent display and system from sleeping
+    kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
+    
     counter = 0
     # VK_F15 = 0x7E
+    # MOUSEEVENTF_MOVE = 0x0001
     while _keep_awake_active:
         if counter >= 30:
+            # 1. Jiggle mouse relative (1 px right, 1 px left) to reset idle status (Teams/Slack/etc.)
+            user32.mouse_event(0x0001, 1, 0, 0, 0)
+            user32.mouse_event(0x0001, -1, 0, 0, 0)
+            
+            # 2. Simulate virtual keypress (VK_F15) as a secondary backup
             user32.keybd_event(0x7E, 0, 0, 0)
             user32.keybd_event(0x7E, 0, 2, 0)
+            
+            # 3. Maintain thread execution state request
+            kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
+            
             counter = 0
         time.sleep(1)
         counter += 1
+        
+    # Reset thread execution state to allow normal sleep when deactivated
+    kernel32.SetThreadExecutionState(ES_CONTINUOUS)
 
 def start_keep_awake():
     global _keep_awake_active
@@ -797,14 +1086,14 @@ def set_power_state(state):
     elif state_clean == "restart":
         speak("Initiating system reboot protocol...")
         try:
-            subprocess.run("shutdown.exe /r /t 0", shell=True)
+            subprocess.run("shutdown.exe /r /f /t 0", shell=True)
             return "Reboot command sent to OS."
         except Exception as e:
             return f"Failed to reboot: {e}"
     elif state_clean == "shutdown":
         speak("Initiating system shutdown protocol...")
         try:
-            subprocess.run("shutdown.exe /s /t 0", shell=True)
+            subprocess.run("shutdown.exe /s /f /t 0", shell=True)
             return "Shutdown command sent to OS."
         except Exception as e:
             return f"Failed to shutdown: {e}"
@@ -1582,4 +1871,56 @@ def whatsapp_logout_action():
         return res
     except Exception as e:
         return f"Error logging out of WhatsApp: {e}"
+
+def trigger_file_explorer_hotkey():
+    """
+    Simulates pressing Ctrl+Alt+C to open File Explorer.
+    """
+    import ctypes
+    import time
+    user32 = ctypes.windll.user32
+    
+    VK_CONTROL = 0x11
+    VK_MENU = 0x12  # ALT key
+    VK_C = 0x43      # 'C' key
+    
+    # Press keys
+    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+    user32.keybd_event(VK_MENU, 0, 0, 0)
+    user32.keybd_event(VK_C, 0, 0, 0)
+    
+    time.sleep(0.05)
+    
+    # Release keys
+    user32.keybd_event(VK_C, 0, 2, 0)
+    user32.keybd_event(VK_MENU, 0, 2, 0)
+    user32.keybd_event(VK_CONTROL, 0, 2, 0)
+    
+    return "Successfully triggered File Explorer shortcut (Ctrl+Alt+C)."
+
+def trigger_youtube_hotkey():
+    """
+    Simulates pressing Ctrl+Alt+X to open YouTube.
+    """
+    import ctypes
+    import time
+    user32 = ctypes.windll.user32
+    
+    VK_CONTROL = 0x11
+    VK_MENU = 0x12  # ALT key
+    VK_X = 0x58      # 'X' key
+    
+    # Press keys
+    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+    user32.keybd_event(VK_MENU, 0, 0, 0)
+    user32.keybd_event(VK_X, 0, 0, 0)
+    
+    time.sleep(0.05)
+    
+    # Release keys
+    user32.keybd_event(VK_X, 0, 2, 0)
+    user32.keybd_event(VK_MENU, 0, 2, 0)
+    user32.keybd_event(VK_CONTROL, 0, 2, 0)
+    
+    return "Successfully triggered YouTube shortcut (Ctrl+Alt+X)."
 

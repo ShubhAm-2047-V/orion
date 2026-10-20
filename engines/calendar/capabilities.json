@@ -1,0 +1,11 @@
+{
+  "engine": "calendar",
+  "capabilities": [
+    "get_time",
+    "get_date",
+    "get_calendar",
+    "add_schedule",
+    "list_schedules",
+    "cancel_schedule"
+  ]
+}

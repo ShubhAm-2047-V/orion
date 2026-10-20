@@ -1,0 +1,8 @@
+{
+  "engine": "notification",
+  "capabilities": [
+    "send_notification",
+    "alert_user",
+    "play_alarm_sound"
+  ]
+}

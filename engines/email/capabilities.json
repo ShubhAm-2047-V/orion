@@ -1,0 +1,8 @@
+{
+  "engine": "email",
+  "capabilities": [
+    "send_email",
+    "read_emails",
+    "fetch_attachments"
+  ]
+}

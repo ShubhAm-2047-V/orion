@@ -5,7 +5,7 @@ import datetime
 import time
 from actions import (
     speak, open_app, run_shell_command, search_web, open_url, get_system_status, lock_pc, 
-    clean_temp, close_app, run_macro, close_current_app, minimize_all, maximize_all, 
+    clean_temp, close_app, run_macro, close_current_app, close_all_programs, minimize_all, maximize_all, 
     minimize_current_app, maximize_current_app, maximize_app, minimize_app, schedule_open, 
     schedule_close, snap_app, switch_to_app, control_volume, start_keep_awake, stop_keep_awake, 
     set_brightness, set_power_state, trigger_media_key, get_battery_status, empty_recycle_bin, 
@@ -20,6 +20,43 @@ from actions import (
 )
 from nlp_engine import translate_to_command
 
+def print(*args, **kwargs):
+    import builtins
+    builtins.print(*args, **kwargs)
+    
+    # Check if we should speak this print output
+    if args and isinstance(args[0], str):
+        import re
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-9?]*[ -/]*[@-~])')
+        plain_text = ansi_escape.sub('', args[0])
+        
+        if plain_text.startswith("\n"):
+            plain_text_clean = plain_text.strip()
+            
+            # Strip [JARVIS]: or [SYSTEM]: prefix first so exclusions work reliably
+            if plain_text_clean.startswith("[JARVIS]:"):
+                plain_text_clean = plain_text_clean[len("[JARVIS]:"):].strip()
+            elif plain_text_clean.startswith("[SYSTEM]:"):
+                plain_text_clean = plain_text_clean[len("[SYSTEM]:"):].strip()
+            
+            # Exclude help menus, banners, diagnostic logs, and empty strings
+            if (plain_text_clean and 
+                not plain_text_clean.startswith("---") and 
+                not plain_text_clean.startswith("[ SYSTEM") and 
+                not plain_text_clean.startswith("[ APPLICATIONS") and 
+                not plain_text_clean.startswith("[ SCHEDULING") and 
+                not plain_text_clean.startswith("[ MULTIMEDIA") and 
+                not plain_text_clean.startswith("[ WHATSAPP") and 
+                not plain_text_clean.startswith("[ WEB") and 
+                not plain_text_clean.startswith("[ ALL") and 
+                not plain_text_clean.lower().startswith("interpreting query as") and
+                not plain_text_clean.lower().startswith("calibrating microphone") and
+                not plain_text_clean.lower().startswith("always-listening mode active")):
+                
+                # Speak asynchronously via actions.speak
+                from actions import speak
+                speak(plain_text_clean, False)
+
 # ANSI Color Codes
 COLOR_CYAN = "\033[36m"
 COLOR_GREEN = "\033[32m"
@@ -33,7 +70,7 @@ BANNER = f"""{COLOR_CYAN}=======================================================
      / __| / _ \\ |   / \\\\ V /  | | \\__ \\\\
      \\___|/_/ \\_\\|_|_\\  \\_/  |___||___/{COLOR_RESET}
                                        
-  {COLOR_GRAY}[ System: Online | Hotkey: Ctrl+Alt+J | Status: OK ]{COLOR_RESET}
+  {COLOR_GRAY}[ System: Online | Hotkey: Ctrl+Alt+B | Status: OK ]{COLOR_RESET}
 {COLOR_CYAN}============================================================{COLOR_RESET}"""
 
 def print_help(category=None):
@@ -235,6 +272,39 @@ def clean_command_prefixes(cmd):
         
     return cmd_clean
 
+def split_compound_command(command_str):
+    parts = []
+    current_part = []
+    in_double_quotes = False
+    in_single_quotes = False
+    
+    i = 0
+    n = len(command_str)
+    while i < n:
+        char = command_str[i]
+        
+        if char == '"' and not in_single_quotes:
+            in_double_quotes = not in_double_quotes
+            current_part.append(char)
+            i += 1
+        elif char == "'" and not in_double_quotes:
+            in_single_quotes = not in_single_quotes
+            current_part.append(char)
+            i += 1
+        elif (not in_double_quotes and not in_single_quotes and 
+              command_str[i:i+5].lower() == ' and '):
+            parts.append("".join(current_part).strip())
+            current_part = []
+            i += 5  # Skip ' and '
+        else:
+            current_part.append(char)
+            i += 1
+            
+    if current_part:
+        parts.append("".join(current_part).strip())
+        
+    return [p for p in parts if p]
+
 def parse_and_execute(user_input):
     translated_cmd = translate_to_command(user_input)
     if translated_cmd != user_input:
@@ -243,6 +313,13 @@ def parse_and_execute(user_input):
 
     user_input = clean_command_prefixes(user_input)
     if not user_input:
+        return
+        
+    parts = split_compound_command(user_input)
+    if len(parts) > 1:
+        print(f"\n{COLOR_CYAN}[JARVIS]: Splitting compound command into {len(parts)} actions...{COLOR_RESET}")
+        for part in parts:
+            parse_and_execute(part)
         return
     
     user_input_lower = user_input.lower()
@@ -263,8 +340,12 @@ def parse_and_execute(user_input):
         
     # 1. Exit commands
     if user_input_lower in ['exit', 'quit', 'shutdown jarvis', 'bye', 'shutdown']:
-        speak("Terminating system session. Goodbye, sir.")
-        sys.exit(0)
+        from gui import ui_state
+        if ui_state.gui_instance:
+            ui_state.gui_instance.root.after(100, ui_state.gui_instance.root.destroy)
+        else:
+            sys.exit(0)
+        return
         
     # 2. Help commands
     help_match = re.match(r'^(?:help|commands|menu|matrix)(?:\s+(system|apps|schedule|media|whatsapp|web|all))?$', user_input_lower)
@@ -292,6 +373,15 @@ def parse_and_execute(user_input):
         from voice_engine import voice_loop_mode
         voice_loop_mode()
         return
+
+    # Delegate all domain and app commands to JARVIS Core & Engine Router
+    from core import JARVISCore
+    core = JARVISCore()
+    res = core.process_request(user_input)
+    if res:
+        print(f"\n[JARVIS]: {res}")
+    return
+
 
     # 3. System Status
     if re.match(r'^(system\s+status|status|diagnostics|sysinfo|system)$', user_input_lower):
@@ -784,9 +874,9 @@ def parse_and_execute(user_input):
 
     # 6.3 Timed/Scheduled Controls (Persistent Scheduler integration)
     # Open app relative: open chrome in/after 10 minutes
-    sched_open_match = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
+    sched_open_match = re.match(r'^(?:open|launch|start|run|kholo|chalu)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input_lower)
     if sched_open_match:
-        sched_open_orig = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
+        sched_open_orig = re.match(r'^(?:open|launch|start|run|kholo|chalu)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input, re.IGNORECASE)
         if sched_open_orig:
             app_name = sched_open_orig.group(1).strip()
             val_val = int(sched_open_orig.group(2).strip())
@@ -804,9 +894,9 @@ def parse_and_execute(user_input):
             return
 
     # Close app relative: close chrome in/after 10 minutes
-    sched_close_match = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
+    sched_close_match = re.match(r'^(?:close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input_lower)
     if sched_close_match:
-        sched_close_orig = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+(?:in|after)\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
+        sched_close_orig = re.match(r'^(?:close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input, re.IGNORECASE)
         if sched_close_orig:
             app_name = sched_close_orig.group(1).strip()
             val_val = int(sched_close_orig.group(2).strip())
@@ -824,9 +914,9 @@ def parse_and_execute(user_input):
             return
 
     # Open app absolute: open chrome at 10:00
-    sched_open_abs = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+at\s+(\d{1,2}:\d{2})$', user_input_lower)
+    sched_open_abs = re.match(r'^(?:open|launch|start|run|kholo|chalu)\s+([a-zA-Z0-9_\-\.\s]+?)\s+at\s+(\d{1,2}:\d{2})$', user_input_lower)
     if sched_open_abs:
-        sched_open_abs_orig = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+at\s+(\d{1,2}:\d{2})$', user_input, re.IGNORECASE)
+        sched_open_abs_orig = re.match(r'^(?:open|launch|start|run|kholo|chalu)\s+([a-zA-Z0-9_\-\.\s]+?)\s+at\s+(\d{1,2}:\d{2})$', user_input, re.IGNORECASE)
         if sched_open_abs_orig:
             app_name = sched_open_abs_orig.group(1).strip()
             time_val = sched_open_abs_orig.group(2).strip()
@@ -843,9 +933,9 @@ def parse_and_execute(user_input):
             return
 
     # Close app absolute: close chrome at 18:00
-    sched_close_abs = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+at\s+(\d{1,2}:\d{2})$', user_input_lower)
+    sched_close_abs = re.match(r'^(?:close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+at\s+(\d{1,2}:\d{2})$', user_input_lower)
     if sched_close_abs:
-        sched_close_abs_orig = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+at\s+(\d{1,2}:\d{2})$', user_input, re.IGNORECASE)
+        sched_close_abs_orig = re.match(r'^(?:close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+at\s+(\d{1,2}:\d{2})$', user_input, re.IGNORECASE)
         if sched_close_abs_orig:
             app_name = sched_close_abs_orig.group(1).strip()
             time_val = sched_close_abs_orig.group(2).strip()
@@ -861,10 +951,62 @@ def parse_and_execute(user_input):
             print(f"\n{res}")
             return
 
+    # Power control relative schedule: e.g. shutdown the pc in 30 seconds / turn off computer after 5 mins
+    sched_power_rel = re.match(r'^(sleep|restart|reboot|shutdown|turn\s+off|power\s+off|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input_lower)
+    if sched_power_rel:
+        sched_power_rel_orig = re.match(r'^(sleep|restart|reboot|shutdown|turn\s+off|power\s+off|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?\s+(?:in|after)\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input, re.IGNORECASE)
+        if sched_power_rel_orig:
+            raw_action = sched_power_rel_orig.group(1).strip().lower()
+            val_val = int(sched_power_rel_orig.group(2).strip())
+            unit_val = sched_power_rel_orig.group(3).strip().lower()
+            
+            if raw_action in ["restart", "reboot"]:
+                state_val = "restart"
+            elif raw_action in ["sleep", "put to sleep"]:
+                state_val = "sleep"
+            else:
+                state_val = "shutdown"
+                
+            multiplier = 1
+            if unit_val.startswith("m"):
+                multiplier = 60
+            elif unit_val.startswith("h"):
+                multiplier = 3600
+                
+            trigger_time = time.time() + (val_val * multiplier)
+            res = add_jarvis_schedule("one-shot", trigger_time, f"{state_val} pc")
+            print(f"\n{res}")
+            return
+
+    # Power control absolute schedule: e.g. shutdown the pc at 18:00
+    sched_power_abs = re.match(r'^(sleep|restart|reboot|shutdown|turn\s+off|power\s+off|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?\s+at\s+(\d{1,2}:\d{2})$', user_input_lower)
+    if sched_power_abs:
+        sched_power_abs_orig = re.match(r'^(sleep|restart|reboot|shutdown|turn\s+off|power\s+off|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?\s+at\s+(\d{1,2}:\d{2})$', user_input, re.IGNORECASE)
+        if sched_power_abs_orig:
+            raw_action = sched_power_abs_orig.group(1).strip().lower()
+            time_val = sched_power_abs_orig.group(2).strip()
+            if raw_action in ["restart", "reboot"]:
+                state_val = "restart"
+            elif raw_action in ["sleep", "put to sleep"]:
+                state_val = "sleep"
+            else:
+                state_val = "shutdown"
+            if len(time_val.split(":")[0]) == 1:
+                time_val = "0" + time_val
+            now_dt = datetime.datetime.now()
+            target_dt_str = f"{now_dt.strftime('%Y-%m-%d')} {time_val}:00"
+            target_dt = datetime.datetime.strptime(target_dt_str, "%Y-%m-%d %H:%M:%S")
+            if now_dt > target_dt:
+                target_dt += datetime.timedelta(days=1)
+                target_dt_str = target_dt.strftime("%Y-%m-%d %H:%M:%S")
+            res = add_jarvis_schedule("one-shot", target_dt_str, f"{state_val} pc")
+            print(f"\n{res}")
+            return
+
     # Open app recurring: open chrome every 30 minutes
-    sched_open_rec = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+every\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
+    sched_open_rec = re.match(r'^(?:open|launch|start|run|kholo|chalu)\s+([a-zA-Z0-9_\-\.\s]+?)\s+every\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input_lower)
     if sched_open_rec:
-        sched_open_rec_orig = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)\s+every\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
+        sched_open_rec_orig = re.match(r'^(?:open|launch|start|run|kholo|chalu)\s+([a-zA-Z0-9_\-\.\s]+?)\s+every\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input, re.IGNORECASE)
         if sched_open_rec_orig:
             app_name = sched_open_rec_orig.group(1).strip()
             val_val = int(sched_open_rec_orig.group(2).strip())
@@ -882,9 +1024,9 @@ def parse_and_execute(user_input):
             return
 
     # Close app recurring: close chrome every 30 minutes
-    sched_close_rec = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+every\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input_lower)
+    sched_close_rec = re.match(r'^(?:close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+every\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input_lower)
     if sched_close_rec:
-        sched_close_rec_orig = re.match(r'^close\s+([a-zA-Z0-9_\-\.\s]+)\s+every\s+(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)$', user_input, re.IGNORECASE)
+        sched_close_rec_orig = re.match(r'^(?:close|kill|terminate|stop|band)\s+([a-zA-Z0-9_\-\.\s]+?)\s+every\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$', user_input, re.IGNORECASE)
         if sched_close_rec_orig:
             app_name = sched_close_rec_orig.group(1).strip()
             val_val = int(sched_close_rec_orig.group(2).strip())
@@ -908,9 +1050,15 @@ def parse_and_execute(user_input):
         return
 
     # 5.6 Power Controls
-    power_match = re.match(r'^(sleep|restart|shutdown)\s+pc$', user_input_lower)
+    power_match = re.match(r'^(sleep|restart|reboot|shutdown|turn\s+off|power\s+off|put\s+to\s+sleep)(?:\s+(?:the\s+|my\s+)?(?:pc|computer|system|machine|desktop))?$', user_input_lower)
     if power_match:
-        state = power_match.group(1)
+        raw_action = power_match.group(1).strip()
+        if raw_action in ["restart", "reboot"]:
+            state = "restart"
+        elif raw_action in ["sleep", "put to sleep"]:
+            state = "sleep"
+        else:
+            state = "shutdown"
         res = set_power_state(state)
         print(f"\n{res}")
         return
@@ -947,6 +1095,20 @@ def parse_and_execute(user_input):
         print(f"\n{res}")
         return
 
+    # 5.5 Open File Explorer hotkey shortcut
+    if user_input_lower in ['open file', 'open file explorer', 'open explorer']:
+        from actions import trigger_file_explorer_hotkey
+        res = trigger_file_explorer_hotkey()
+        speak(res)
+        return
+
+    # 5.51 Open YouTube hotkey shortcut
+    if user_input_lower in ['open youtube', 'open youtube.com', 'launch youtube', 'website youtube.com']:
+        from actions import trigger_youtube_hotkey
+        res = trigger_youtube_hotkey()
+        speak(res)
+        return
+
     # 6. Open Application
     open_match = re.match(r'^open\s+([a-zA-Z0-9_\-\.\s]+)$', user_input_lower)
     if open_match:
@@ -964,6 +1126,12 @@ def parse_and_execute(user_input):
     # 6.4 Close Current App
     if re.match(r'^(close\s+current\s+app|close\s+current\s+window|close\s+active\s+app|close\s+current)$', user_input_lower):
         res = close_current_app()
+        speak(res)
+        return
+
+    # 6.41 Close All Programs
+    if re.match(r'^(close\s+all\s+programs|close\s+all\s+running\s+programs|close\s+all\s+the\s+programs\s+running|close\s+all\s+apps|close\s+all\s+running\s+apps|close\s+everything)$', user_input_lower):
+        res = close_all_programs()
         speak(res)
         return
 
@@ -1168,13 +1336,12 @@ def start_hotkey_listener():
         import ctypes.wintypes
         
         user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
         
         MODIFIERS = 0x0002 | 0x0001  # MOD_CONTROL (0x02) | MOD_ALT (0x01)
-        VK_J = 0x4A                  # 'J' key
+        VK_B = 0x42                  # 'B' key
         HOTKEY_ID = 42
         
-        res = user32.RegisterHotKey(None, HOTKEY_ID, MODIFIERS, VK_J)
+        res = user32.RegisterHotKey(None, HOTKEY_ID, MODIFIERS, VK_B)
         if not res:
             return
             
@@ -1183,11 +1350,9 @@ def start_hotkey_listener():
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
                 if msg.message == 0x0312:  # WM_HOTKEY
                     if msg.wParam == HOTKEY_ID:
-                        hwnd = kernel32.GetConsoleWindow()
-                        if hwnd:
-                            # SW_RESTORE = 9
-                            user32.ShowWindow(hwnd, 9)
-                            user32.SetForegroundWindow(hwnd)
+                        from gui import ui_state
+                        if ui_state.gui_instance:
+                            ui_state.gui_instance.root.after(0, ui_state.gui_instance.show_and_focus)
                 user32.TranslateMessage(ctypes.byref(msg))
                 user32.DispatchMessageW(ctypes.byref(msg))
         finally:
@@ -1215,11 +1380,19 @@ def focus_existing_jarvis():
             return buffer.value
         return ""
 
+    def get_window_class(hwnd):
+        buffer = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, buffer, 256)
+        return buffer.value
+
     def enum_windows_callback(hwnd, lParam):
         if user32.IsWindowVisible(hwnd):
             title = get_window_title(hwnd)
             if "Jarvis Assistant" in title:
-                hwnd_list.append(hwnd)
+                class_name = get_window_class(hwnd)
+                # We want the Tkinter window, not the Console window (which sets title via cmd/bat)
+                if class_name != "ConsoleWindowClass":
+                    hwnd_list.append(hwnd)
         return True
         
     cb = WNDENUMPROC(enum_windows_callback)
@@ -1230,8 +1403,10 @@ def focus_existing_jarvis():
     for hwnd in hwnd_list:
         if hwnd != current_hwnd:
             user32.ShowWindow(hwnd, 9) # SW_RESTORE = 9
+            user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040) # HWND_TOPMOST = -1, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW
             user32.SetForegroundWindow(hwnd)
-            break
+            return True
+    return False
 
 def enable_colors():
     import sys
@@ -1248,6 +1423,14 @@ def enable_colors():
         return bool(kernel32.SetConsoleMode(hStdOut, mode.value | 0x0004))
     return False
 
+def hide_console():
+    import ctypes
+    import sys
+    # Only hide if running under standard python (not pythonw) and console exists
+    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if hwnd:
+        ctypes.windll.user32.ShowWindow(hwnd, 0) # SW_HIDE = 0
+
 def main():
     import ctypes
     enable_colors()
@@ -1257,8 +1440,20 @@ def main():
     global _instance_mutex
     _instance_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
     if ctypes.windll.kernel32.GetLastError() == 183: # ERROR_ALREADY_EXISTS
-        focus_existing_jarvis()
-        sys.exit(0)
+        if focus_existing_jarvis():
+            sys.exit(0)
+        # If no visible window could be brought to foreground, clean up stale background ghost processes
+        try:
+            current_pid = os.getpid()
+            import subprocess
+            subprocess.run(
+                f'powershell -Command "Get-CimInstance Win32_Process | Where-Object {{ $_.ProcessId -ne {current_pid} -and $_.CommandLine -like \'*main.py*\' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"',
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
 
     print(BANNER)
     speak("Hello sir.")
@@ -1270,9 +1465,16 @@ def main():
     from schedule.scheduler import scheduler_loop
     threading.Thread(target=scheduler_loop, args=(parse_and_execute,), daemon=True).start()
     
-    # Start the always-listening loop in main thread
+    # Hide the console window
+    hide_console()
+
+    # Start the always-listening loop in background thread
     from voice_engine import always_listening_loop
-    always_listening_loop()
+    threading.Thread(target=always_listening_loop, daemon=True).start()
+    
+    # Start GUI main loop
+    from gui import start_gui
+    start_gui()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,7 @@
+{
+  "engine": "vision",
+  "capabilities": [
+    "take_screenshot",
+    "analyze_image"
+  ]
+}

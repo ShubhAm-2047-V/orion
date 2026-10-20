@@ -1,0 +1,7 @@
+{
+  "engine": "telegram",
+  "capabilities": [
+    "telegram_send_msg",
+    "telegram_read_msg"
+  ]
+}

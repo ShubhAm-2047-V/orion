@@ -1,0 +1,16 @@
+{
+  "engine": "whatsapp",
+  "capabilities": [
+    "whatsapp_login",
+    "whatsapp_send_msg",
+    "whatsapp_send_file",
+    "whatsapp_unreads",
+    "whatsapp_status",
+    "whatsapp_call",
+    "whatsapp_broadcast",
+    "whatsapp_auto_reply",
+    "whatsapp_mute",
+    "whatsapp_logout",
+    "schedule_action"
+  ]
+}

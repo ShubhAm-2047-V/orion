@@ -1,0 +1,8 @@
+{
+  "engine": "memory",
+  "capabilities": [
+    "store_memory",
+    "retrieve_memory",
+    "clear_memory"
+  ]
+}

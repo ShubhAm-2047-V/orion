@@ -1,0 +1,8 @@
+{
+  "engine": "youtube",
+  "capabilities": [
+    "launch_youtube",
+    "search_youtube",
+    "play_video"
+  ]
+}
